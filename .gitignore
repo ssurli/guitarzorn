@@ -11,10 +11,15 @@ venv/
 # Generated images (examples/tests)
 example_*.png
 batch_*.png
+*_temp.png
+comparison_base.png
+johnny_artistic_raw.png
 
 # Keep specific reference outputs
 !johnny_b_goode_abstract_expressionist.png
 !johnny_b_goode_zorn_riff.png
+!comparison_*.png
+!johnny_artistic_artistic.png
 
 # IDE
 .vscode/
