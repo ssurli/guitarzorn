@@ -1,0 +1,96 @@
+0) Input
+
+Sorgente: la tab che mi hai passato per il lick di “Johnny B. Goode”.
+
+Normalizzo ogni evento in una lista di note con:
+
+pitch (MIDI calcolato da corda+tasto, standard tuning),
+
+duration in battiti,
+
+velocity stimata (p, mp, mf, f) se indicata o inferita,
+
+articulation (staccato/legato), più flags per slide, bend, vibrato.
+
+1) Timeline e coordinate
+
+Asse X = tempo cumulato in battiti.
+
+Asse Y = altezza (pitch) normalizzata su un range [0..1], poi scalata a pixel.
+
+Spaziatura: 120 px per battito, 12 px per semitono. Margini 80 px.
+
+2) Palette Zorn rigorosa
+
+Niente verde, niente blu. Solo:
+
+Yellow Ochre ≈ #C4A46A
+
+Vermilion ≈ #E34234
+
+Ivory Black ≈ #1C1C1C
+
+Titanium White ≈ #F2F2F2
+
+Per “tinte” intermedie ho fatto solo mixing lineare tra questi quattro, ad esempio:
+
+Toni medi → blend Ochre/Vermilion.
+
+Ombre → blend con Ivory Black.
+
+Luci/registro alto → blend con Titanium White.
+Zero cromie fuori gamma, promessa mantenuta.
+
+3) Mapping musica → pittura
+
+Pitch → tonalità/luminosità
+Registro basso più scuro (mix con Black), registro alto più chiaro (mix con White). Ogni ottava sposta la L* di ±10 punti circa.
+
+Durata → lunghezza del segno
+Più lunga la nota, più lunga la pennellata in X.
+
+Dinamica (velocity) → spessore
+p=2 px, mp=3 px, mf=4 px, f=6 px. Clippato a [1..8].
+
+Articolazione
+
+Legato: curve di Bézier morbide tra note adiacenti.
+
+Staccato: segmenti brevi con “cap” tronco e micro-gap.
+
+Slide: segmento inclinato continuo tra i due pitch, con lieve easing.
+
+Bend: curva quadratica con control point alzato di ~20 px.
+
+Vibrato: piccola sinusoide (amp 3–5 px, freq 8–10 cicli per durata).
+
+4) Rendering
+
+Backend: Matplotlib (linee anti-alias, PathPatch per Bézier).
+
+Sfondo: ocra (Yellow Ochre) come colore della figura e del salvataggio.
+
+Piccolo jitter sub-pixel (±0.3 px) su inizio/fine pennellata per togliere l’effetto “plotter”.
+
+Opacità: 0.85 per i tratti principali, 0.6 per accenti e decorazioni. Clippata a [0..1] per evitare l’errore “alpha outside 0–1”.
+
+Staccato marker: RegularPolygon((x,y), 6, r, orientation=0) con firma corretta. L’errore che avevi (“takes 3 positional args but 4 were given”) si risolve passando orientation come keyword.
+
+5) Parametri concreti usati
+
+Canvas: 1600×1000 px, DPI 150.
+
+Seed jitter: 42 per ripetibilità.
+
+Linejoin/linecap: round.
+
+Spacing: 120 px per beat, 12 px per semitono.
+
+Color mixing: mix lineare in RGB fra i 4 colori Zorn, niente HSL “fantasiosi”.
+
+Export: savefig('riff_jbg.png', facecolor=bg_color, dpi=150, bbox_inches='tight').
+Questo evita lo sfondo bianco e mantiene l’ocra. Assi disattivati (axis('off')).
+
+6) Post-processing
+
+Nessun filtro “segreto”. Al massimo un leggerissimo Gaussian blur a raggio 0.3–0.5 px per ammorbidire l’aliasing dei segmenti staccati. Fine.

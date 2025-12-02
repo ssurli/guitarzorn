@@ -1,0 +1,153 @@
+codice python per 'traslitterare' riff chitarra (intro jhonny be good) a quadro astratto in stile Zorn (palette 4 colori: ocra, vermiglione, giallo, bianco e nero). iL concetto chiave è usare la pentatonica che 'semplifica' la rappresentazione musicale così come la palette di Zorn semplifica la rappresentazione pittorica. voglio ottenere una sequenza di forme con colori della paletta di zorn sulla base dei seguenti parametri: 0) Input Sorgente: la tab che mi hai passato per il lick di “Johnny B. Goode”. Normalizzo ogni evento in una lista di note con: pitch (MIDI calcolato da corda+tasto, standard tuning), duration in battiti, velocity stimata (p, mp, mf, f) se indicata o inferita, articulation (staccato/legato), più flags per slide, bend, vibrato. 1) Timeline e coordinate Asse X = tempo cumulato in battiti. Asse Y = altezza (pitch) normalizzata su un range [0..1], poi scalata a pixel. Spaziatura: 120 px per battito, 12 px per semitono. Margini 80 px. 2) Palette Zorn rigorosa Niente verde, niente blu. Solo: Yellow Ochre ≈ #C4A46A Vermilion ≈ #E34234 Ivory Black ≈ #1C1C1C Titanium White ≈ #F2F2F2 Per “tinte” intermedie ho fatto solo mixing lineare tra questi quattro, ad esempio: Toni medi → blend Ochre/Vermilion. Ombre → blend con Ivory Black. Luci/registro alto → blend con Titanium White. Zero cromie fuori gamma, promessa mantenuta. 3) Mapping musica → pittura Pitch → tonalità/luminosità Registro basso più scuro (mix con Black), registro alto più chiaro (mix con White). Ogni ottava sposta la L* di ±10 punti circa. Durata → lunghezza del segno Più lunga la nota, più lunga la pennellata in X. Dinamica (velocity) → spessore p=2 px, mp=3 px, mf=4 px, f=6 px. Clippato a [1..8]. Articolazione Legato: curve di Bézier morbide tra note adiacenti. Staccato: segmenti brevi con “cap” tronco e micro-gap. Slide: segmento inclinato continuo tra i due pitch, con lieve easing. Bend: curva quadratica con control point alzato di ~20 px. Vibrato: piccola sinusoide (amp 3–5 px, freq 8–10 cicli per durata). 4) Rendering Backend: Matplotlib (linee anti-alias, PathPatch per Bézier). Sfondo: ocra (Yellow Ochre) come colore della figura e del salvataggio. Piccolo jitter sub-pixel (±0.3 px) su inizio/fine pennellata per togliere l’effetto “plotter”. Opacità: 0.85 per i tratti principali, 0.6 per accenti e decorazioni. Clippata a [0..1] per evitare l’errore “alpha outside 0–1”. Staccato marker: RegularPolygon((x,y), 6, r, orientation=0) con firma corretta. L’errore che avevi (“takes 3 positional args but 4 were given”) si risolve passando orientation come keyword. 5) Parametri concreti usati Canvas: 1600×1000 px, DPI 150. Seed jitter: 42 per ripetibilità. Linejoin/linecap: round. Spacing: 120 px per beat, 12 px per semitono. Color mixing: mix lineare in RGB fra i 4 colori Zorn, niente HSL “fantasiosi”. Export: savefig('riff_jbg.png', facecolor=bg_color, dpi=150, bbox_inches='tight'). Questo evita lo sfondo bianco e mantiene l’ocra. Assi disattivati (axis('off')). 6) Post-processing Nessun filtro “segreto”. Al massimo un leggerissimo Gaussian blur a raggio 0.3–0.5 px per ammorbidire l’aliasing dei segmenti staccati.
+
+
+🎵 → 🎨 Parametri grafici- Vocabolario Grafico Esteso – Pittorico
+
+
+1. Nota (altezza) → Colore
+
+Scala pentatonica minore di La come base:
+
+A = Giallo Ocra
+
+C = Rosso Vermiglione
+
+D = Nero Avorio
+
+E = Bianco Titanio
+
+G = Ocra+Nero (mescolanza)
+
+Note “esterne” = sfumature/variazioni (es. Bb → rosso scuro, F → grigio).
+
+Ottave (stessa nota ma in ottava diversa) → stessa tinta, luminosità diversa.
+
+Mappa Colore → Nota (Pentatonica minore di La)
+
+Nota	Colore Zorn		Ruolo musicale
+
+A	Giallo Ocra		Tonica
+C	Rosso Vermiglione	Terza minore
+D	Nero Avorio		Quarta
+E	Bianco Titanio		Quinta
+G	Mescolanza Ocra+Nero	Settima minore
+
+
+Griglia di posizione (tastiera chitarra, 5 tasti, A min pentatonica)
+e|----------------------------------5(Rosso)---8(Bianco)---
+B|---------------------------5(Ocra)---8(Rosso)-------------
+G|--------------------5(Nero)---7(Bianco)------------------
+D|---------------5(Ocra)---7(Rosso)------------------------
+A|---------5(A)---7(C)-------------------------------------
+E|-5(A)---8(C)---------------------------------------------
+
+Legenda colori Zorn:
+
+Giallo Ocra = A
+
+Rosso Vermiglione = C
+
+Nero Avorio = D
+
+Bianco Titanio = E
+
+2. Tecniche chitarristiche - Tecnica/Articolazione → Forma
+
+Slide (/)= tratto diagonale con punto d’arrivo→ pennellata diagonale continua che “scivola”.
+
+Hammer-on/Pull-off (h/p) → due macchie ravvicinate con sfumatura di unione→ puntinatura connessa da piccole linee curve.
+
+Vibrato → piccola ondulazione del bordo della macchia, contorno ondulato → pennellata tremolante (ondulata)
+
+Legato = sfumatura continua→ pennellata sfumata, continua
+
+Staccato = puntini isolati→ puntini netti
+
+Bend (b) = linea curva che “tira” la macchia → linea curva, allungata, curva “tirata”→ pennellata curva che si piega verso l’alto
+
+Arpeggio = sequenza di puntini ordinati in verticale/diagonale (come una collana di perle) → sequenza di puntini o gocce sottili ascendenti/discendenti.
+
+Shuffle / plettrata = pennellata spessa e ritmica, con andamento ondulato/“swingato”, pennellata spessa ondulata (wavy)→ pennellata spessa e spezzata, ritmo irregolare.
+
+Power chord = macchia squadrata o rettangolare, colori fusi (es. ocra + rosso insieme se A + C) (fusione colori se vuoi mostrare entrambe le note)→ pennellata squadrata, blocco netto di colore.
+
+Note singole, nota corta/staccata = Pennellata singola corta.
+
+Nota Lunga/ sostenuta= Pennellata lunga e sfumata.
+
+Tapping:  piccoli cerchi concentrici luminosi che emergono dentro la pennellata principale, come gocce di luce che bucano il colore. Colore: leggermente più brillante rispetto alla tonalità della nota (accento fluorescente).Dinamica: contrasta col background, crea punti focali.
+
+Leva tremolo: una pennellata a spirale discendente, deformata e allungata verso il basso. Colore: sfumatura che si scurisce progressivamente (es. rosso → nero). Texture: effetto di trascinamento, quasi “scioglimento” del pigmento.
+
+Armonici naturali: piccoli riflessi trasparenti sovrapposti alla pennellata (come un alone leggero, quasi un bagliore).Colore: molto chiaro e “arioso”, verso bianco/azzurro. Dinamica: leggeri, eterei, appena percettibili.
+
+Armonici artificiali (pinch harmonics): scintille affilate che si staccano dalla pennellata (tratti corti, direzionali, quasi graffi luminosi). Colore: forti contrasti). Dinamica: intensi e penetranti, più aggressivi dei naturali.
+
+3. Ritmo → Spazio
+
+Lineare (sinistra → destra) = spartito classico
+
+Spirale o cerchi = groove ciclico, fraseggi più fluidi o modulazioni armoniche
+
+Griglia = partitura visiva strutturata
+
+Accordi simultanei = macchie sovrapposte o fusi in unico colore
+
+Strokes rapidi = note più veloci, Velocità del gesto pittorico → ritmo
+
+Alto → basso = melodia inversa / contrappunto
+
+
+4. Struttura del brano → Composizione della tela
+
+Intro = zona chiara, inizio del tracciato, parte alta/sinistra → prime pennellate
+
+Verso/Chorus = zone centrali più dense, densità crescente di forme
+
+Finale (outro) = parte bassa o dissolvenza con colori più chiari, dissolvenza o colori più trasparenti
+
+Tempo veloce = distanza tra pennellate = vicine. 
+
+Tempo Lento = distanti.
+
+Pattern visivi = groove (ad es. shuffle → pennellate alternate spesse/sottili).
+
+Riff ricorrente → segni ripetuti uguali, come un motivo ornamentale.
+
+Assolo → esplosione di colori divergenti, pennellate più libere.
+
+Strofa / Ritornello → alternanza di campiture, come se fossero due “quadri” con lo stesso stile ma palette diversa.
+
+
+5. Dinamica (volume) → Saturazione (intensità del tocco)
+
+Saturazione = volume → pianissimo = pastello trasparente, fortissimo = colore saturo e materico.
+
+Spessore pennellata = attacco (più forte = più spessa).
+
+Piano → colore chiaro, desaturato, trasparente
+
+Forte → colore saturo, pieno
+
+Crescendo → gradiente che si intensifica
+
+Durata → Dimensione
+
+Breve (croma) = piccola macchia
+
+Media (semiminima) = macchia media
+
+Lunga (minima) = grande macchia
+
+Pausa = spazio vuoto(assenza di colore)
+
+Ottave diverse = stessa tinta, luminosità variabile
+
+
+6. Ritmo → Posizionamento spaziale
+
+Sequenza temporale: puoi leggere da sinistra a destra (spartito lineare) o in spirale (più pittorico), timeline • Spirale/griglia = pattern/groove
+
+Battute: separatori visivi (linee sottili, oppure vuoti regolari).
+
+Accordi (note simultanee): sovrapposizione di macchie o fusione dei colori.
