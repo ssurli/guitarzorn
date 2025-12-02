@@ -323,6 +323,24 @@ def quick_artistic_transform(input_path, output_path, preset='balanced'):
             'blur_sigma': 1.0,
             'color_variation': 0.18,
             'saturation_boost': 1.25
+        },
+        'ultra': {
+            'oil_radius': 8,
+            'canvas_strength': 0.15,
+            'brush_strength': 0.25,
+            'impasto_strength': 0.5,
+            'blur_sigma': 3.5,
+            'color_variation': 0.25,
+            'saturation_boost': 1.3
+        },
+        'dreamlike': {
+            'oil_radius': 10,
+            'canvas_strength': 0.1,
+            'brush_strength': 0.2,
+            'impasto_strength': 0.3,
+            'blur_sigma': 5.0,
+            'color_variation': 0.3,
+            'saturation_boost': 1.35
         }
     }
 

@@ -133,7 +133,7 @@ if __name__ == "__main__":
     parser.add_argument('--dpi', '-d', type=int, default=150,
                        help='Resolution in DPI')
     parser.add_argument('--preset', '-p', default='balanced',
-                       choices=['subtle', 'balanced', 'strong', 'impasto'],
+                       choices=['subtle', 'balanced', 'strong', 'impasto', 'ultra', 'dreamlike'],
                        help='Artistic effect preset')
     parser.add_argument('--batch', '-b', type=int, metavar='N',
                        help='Generate N random variations')
