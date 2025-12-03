@@ -11,9 +11,11 @@ venv/
 # Generated images (examples/tests)
 example_*.png
 batch_*.png
+test_*.png
 *_temp.png
+*_raw.png
 comparison_base.png
-johnny_artistic_raw.png
+base_for_sd_raw.png
 
 # Keep specific reference outputs
 !johnny_b_goode_abstract_expressionist.png
