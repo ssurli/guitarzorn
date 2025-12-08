@@ -128,10 +128,10 @@ class ZornPentatonicPainterly:
     def draw_brushstroke(self, x: float, y: float, angle: float, length: float,
                         width: float, color: np.ndarray, alpha: float = 0.7):
         """
-        Pennellata realistica con setole multiple MIGLIORATA
+        Pennellata realistica con setole multiple ULTRA-DENSE
         """
-        # MIGLIORAMENTO: Più setole (10-15 invece di 3)
-        num_bristles = max(10, int(width * 3))
+        # ULTRA-DENSO: 30-50 setole per pennellate massive
+        num_bristles = random.randint(30, 50)
 
         for i in range(num_bristles):
             # Offset casuale per ogni setola (più variazione)
@@ -161,13 +161,13 @@ class ZornPentatonicPainterly:
     def draw_impasto(self, x: float, y: float, radius: float,
                      color: np.ndarray, alpha: float = 0.8):
         """
-        Impasto: texture materica con layer sovrapposti MIGLIORATA
+        Impasto: texture materica con layer sovrapposti ULTRA-INTENSO
         """
-        # MIGLIORAMENTO: 6 layer invece di 3 per più profondità
-        for layer in range(6):
-            offset = layer * 1.5
-            layer_alpha = alpha * (1.0 - layer * 0.12)
-            layer_radius = radius * (1.0 - layer * 0.08)
+        # ULTRA-INTENSO: 12 layer per massima profondità materica
+        for layer in range(12):
+            offset = layer * 1.2
+            layer_alpha = alpha * (1.0 - layer * 0.06)  # Decadimento più graduale
+            layer_radius = radius * (1.0 - layer * 0.04)  # Riduzione più sottile
 
             # MIGLIORAMENTO: Variazione colore più ricca per ogni layer
             if layer > 0:
@@ -259,10 +259,10 @@ class ZornPentatonicPainterly:
 
     def draw_dripping(self, x: float, y: float, color: np.ndarray, intensity: float = 1.0):
         """
-        NUOVA TECNICA: Dripping Pollock-style
-        Gocciolature verticali/diagonali dalla nota
+        TECNICA ULTRA-INTENSO: Dripping Pollock-style massiccio
+        Gocciolature verticali/diagonali molto marcate
         """
-        num_drips = int(random.randint(2, 5) * intensity)
+        num_drips = int(random.randint(10, 20) * intensity)
 
         for _ in range(num_drips):
             # Direzione principalmente verso il basso ma con variazione
@@ -365,12 +365,61 @@ class ZornPentatonicPainterly:
 
                 current_x, current_y = end_x, end_y
 
+    def draw_wet_on_wet(self, x: float, y: float, radius: float,
+                       color1: np.ndarray, color2: np.ndarray, alpha: float = 0.6):
+        """
+        NUOVA TECNICA: Wet-on-Wet (Alla Prima)
+        Simula colori che si mescolano mentre sono ancora bagnati
+        Crea transizioni organiche e sfumate
+        """
+        # 8-12 macchie di colore che si sovrappongono e mescolano
+        num_blobs = random.randint(8, 12)
+
+        for i in range(num_blobs):
+            # Posizione casuale attorno al centro
+            angle = random.uniform(0, 2*np.pi)
+            distance = random.uniform(0, radius * 0.8)
+            bx = x + np.cos(angle) * distance
+            by = y + np.sin(angle) * distance
+
+            # Gradiente di mixing tra i due colori
+            mix_ratio = i / num_blobs  # Progressivo da color1 a color2
+            # Aggiungi variazione casuale al mixing
+            mix_ratio = np.clip(mix_ratio + random.gauss(0, 0.2), 0, 1)
+
+            # Mix organico dei colori
+            mixed_color = color1 * (1 - mix_ratio) + color2 * mix_ratio
+            # Aggiungi variazione casuale per simulare mixing non perfetto
+            mixed_color = mixed_color + np.random.randn(3) * 0.05
+            mixed_color = np.clip(mixed_color, 0, 1)
+
+            # Dimensione variabile
+            blob_radius = radius * random.uniform(0.3, 0.7)
+
+            # Disegna blob sfumato con bordi morbidi
+            num_edges = random.randint(12, 20)
+            angles = np.linspace(0, 2*np.pi, num_edges, endpoint=False)
+
+            points = []
+            for edge_angle in angles:
+                r = blob_radius * random.uniform(0.7, 1.3)
+                px = bx + r * np.cos(edge_angle)
+                py = by + r * np.sin(edge_angle)
+                points.append([px, py])
+
+            # Alpha variabile per simulare sovrapposizione
+            blob_alpha = alpha * random.uniform(0.4, 0.8)
+
+            polygon = Polygon(points, facecolor=mixed_color,
+                           edgecolor=None, alpha=blob_alpha)
+            self.ax.add_patch(polygon)
+
     def apply_canvas_texture(self):
         """
-        Applica texture canvas effettiva all'immagine
+        Applica texture canvas effettiva all'immagine ULTRA-DENSO
         """
-        # Crea pattern di texture più visibile
-        for _ in range(50):
+        # ULTRA-DENSO: 300 segni per texture canvas molto marcata
+        for _ in range(300):
             x = random.uniform(0, self.width)
             y = random.uniform(0, self.height)
 
@@ -607,6 +656,13 @@ class ZornPentatonicPainterly:
             if random.random() < 0.1:
                 self.draw_craquelure(x, y, base_size * 0.8, color)
 
+            # NUOVA TECNICA: Wet-on-Wet blending (20% probabilità)
+            if random.random() < 0.2:
+                # Scegli un secondo colore Zorn casuale per il mixing
+                color2_name = random.choice(['ochre', 'vermilion', 'black', 'white'])
+                color2 = self.zorn_colors[color2_name]
+                self.draw_wet_on_wet(x, y, base_size * 0.9, color, color2, alpha * 0.5)
+
     def render_artwork(self, notes: List[Dict], output_path: str):
         """
         Renderizza opera completa
@@ -625,9 +681,9 @@ class ZornPentatonicPainterly:
         # 1. Disegna percorso melodico
         self.draw_melodic_path(notes, alpha=0.12)
 
-        # 2. MIGLIORAMENTO: Background texture elements (50 invece di 30!)
-        print("   Disegnando background ricco...")
-        for _ in range(50):
+        # 2. ULTRA-INTENSO: Background texture saturo (150 elementi!)
+        print("   Disegnando background ultra-ricco...")
+        for _ in range(150):
             x = random.uniform(100, self.width - 100)
             y = random.uniform(100, self.height - 100)
             radius = random.uniform(30, 100)
