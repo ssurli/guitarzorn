@@ -128,58 +128,64 @@ class ZornPentatonicPainterly:
     def draw_brushstroke(self, x: float, y: float, angle: float, length: float,
                         width: float, color: np.ndarray, alpha: float = 0.7):
         """
-        Pennellata realistica con setole multiple
+        Pennellata realistica con setole multiple MIGLIORATA
         """
-        num_bristles = max(3, int(width * 2))
+        # MIGLIORAMENTO: Più setole (10-15 invece di 3)
+        num_bristles = max(10, int(width * 3))
 
         for i in range(num_bristles):
-            # Offset casuale per ogni setola
-            offset_x = random.gauss(0, width * 0.3)
-            offset_y = random.gauss(0, width * 0.3)
+            # Offset casuale per ogni setola (più variazione)
+            offset_x = random.gauss(0, width * 0.4)
+            offset_y = random.gauss(0, width * 0.4)
 
-            # Lunghezza variabile
-            bristle_length = length * random.uniform(0.8, 1.1)
+            # Lunghezza variabile (più varietà)
+            bristle_length = length * random.uniform(0.7, 1.2)
 
             # Calcola endpoint
             end_x = x + offset_x + np.cos(angle) * bristle_length
             end_y = y + offset_y + np.sin(angle) * bristle_length
 
-            # Variazione colore per texture
-            color_var = color + np.random.randn(3) * 0.02
+            # MIGLIORAMENTO: Variazione colore più ricca
+            color_var = color + np.random.randn(3) * 0.04
             color_var = np.clip(color_var, 0, 1)
+
+            # MIGLIORAMENTO: Linewidth variabile per texture
+            line_var = width * random.uniform(0.3, 0.6)
 
             # Disegna setola
             self.ax.plot([x + offset_x, end_x], [y + offset_y, end_y],
-                        color=color_var, linewidth=width*0.4,
-                        alpha=alpha*random.uniform(0.7, 1.0),
+                        color=color_var, linewidth=line_var,
+                        alpha=alpha*random.uniform(0.6, 1.0),
                         solid_capstyle='round')
 
     def draw_impasto(self, x: float, y: float, radius: float,
                      color: np.ndarray, alpha: float = 0.8):
         """
-        Impasto: texture materica con layer sovrapposti
+        Impasto: texture materica con layer sovrapposti MIGLIORATA
         """
-        # 3 layer con offset per profondità
-        for layer in range(3):
-            offset = layer * 2
-            layer_alpha = alpha * (1.0 - layer * 0.15)
-            layer_radius = radius * (1.0 - layer * 0.1)
+        # MIGLIORAMENTO: 6 layer invece di 3 per più profondità
+        for layer in range(6):
+            offset = layer * 1.5
+            layer_alpha = alpha * (1.0 - layer * 0.12)
+            layer_radius = radius * (1.0 - layer * 0.08)
 
-            # Variazione colore per layer
+            # MIGLIORAMENTO: Variazione colore più ricca per ogni layer
             if layer > 0:
-                # Layer superiori leggermente più chiari
-                layer_color = color * 1.05
+                # Layer superiori: mix di chiaro/scuro per texture ottica
+                variation = random.uniform(-0.03, 0.08)
+                layer_color = color * (1.0 + variation)
                 layer_color = np.clip(layer_color, 0, 1)
             else:
                 layer_color = color
 
-            # Forma irregolare (poligono)
-            num_points = random.randint(6, 10)
+            # MIGLIORAMENTO: Forma più irregolare (8-15 punti)
+            num_points = random.randint(8, 15)
             angles = np.linspace(0, 2*np.pi, num_points, endpoint=False)
 
             points = []
             for angle in angles:
-                r = layer_radius * random.uniform(0.7, 1.3)
+                # MIGLIORAMENTO: Più irregolarità nei bordi
+                r = layer_radius * random.uniform(0.6, 1.4)
                 px = x + offset + r * np.cos(angle)
                 py = y + offset + r * np.sin(angle)
                 points.append([px, py])
@@ -187,6 +193,69 @@ class ZornPentatonicPainterly:
             polygon = Polygon(points, facecolor=layer_color,
                             edgecolor=None, alpha=layer_alpha)
             self.ax.add_patch(polygon)
+
+    def draw_glazing(self, x: float, y: float, radius: float,
+                     color: np.ndarray, alpha: float = 0.25):
+        """
+        NUOVA TECNICA: Glazing - layer trasparenti sovrapposti
+        Crea profondità ottica come nelle tecniche classiche
+        """
+        # 3-4 layer trasparenti con offset leggero
+        num_glazes = random.randint(3, 4)
+
+        for i in range(num_glazes):
+            offset_x = random.gauss(0, 3)
+            offset_y = random.gauss(0, 3)
+
+            # Variazione colore sottile
+            glaze_color = color + np.random.randn(3) * 0.02
+            glaze_color = np.clip(glaze_color, 0, 1)
+
+            # Cerchio trasparente
+            circle = Circle((x + offset_x, y + offset_y),
+                          radius * random.uniform(0.8, 1.2),
+                          facecolor=glaze_color,
+                          edgecolor=None,
+                          alpha=alpha * random.uniform(0.7, 1.0))
+            self.ax.add_patch(circle)
+
+    def draw_dry_brush(self, x: float, y: float, angle: float, length: float,
+                      color: np.ndarray):
+        """
+        NUOVA TECNICA: Dry Brush - pennellate secche con gaps
+        Simula pennello con poca pittura
+        """
+        # 5-8 tratti corti e interrotti
+        num_strokes = random.randint(5, 8)
+
+        for i in range(num_strokes):
+            # Position lungo la direzione del brush
+            t = i / num_strokes
+            start_x = x + np.cos(angle) * length * t
+            start_y = y + np.sin(angle) * length * t
+
+            # Lunghezza corta e interrotta
+            stroke_len = length * random.uniform(0.05, 0.15)
+            end_x = start_x + np.cos(angle) * stroke_len
+            end_y = start_y + np.sin(angle) * stroke_len
+
+            # Offset laterale per texture
+            offset = random.gauss(0, 3)
+            start_x += np.cos(angle + np.pi/2) * offset
+            start_y += np.sin(angle + np.pi/2) * offset
+            end_x += np.cos(angle + np.pi/2) * offset
+            end_y += np.sin(angle + np.pi/2) * offset
+
+            # Colore con variazione
+            stroke_color = color + np.random.randn(3) * 0.03
+            stroke_color = np.clip(stroke_color, 0, 1)
+
+            # Disegna stroke interrotto
+            self.ax.plot([start_x, end_x], [start_y, end_y],
+                        color=stroke_color,
+                        linewidth=random.uniform(1, 3),
+                        alpha=random.uniform(0.4, 0.7),
+                        solid_capstyle='round')
 
     def draw_melodic_path(self, notes: List[Dict], alpha: float = 0.15):
         """
@@ -279,13 +348,22 @@ class ZornPentatonicPainterly:
                                 base_size * 0.5, color, alpha * 0.7)
 
         else:
-            # Forma standard: impasto + pennellata
+            # Forma standard: impasto + pennellata + NUOVE TECNICHE
             self.draw_impasto(x, y, base_size * 0.7, color, alpha)
 
-            # Aggi pennellata decorativa
+            # Pennellata decorativa
             angle = random.uniform(0, 2 * np.pi)
             self.draw_brushstroke(x, y, angle, base_size * 0.8,
                                 base_size * 0.2, color, alpha * 0.6)
+
+            # MIGLIORAMENTO: Aggiungi glazing per profondità (30% probabilità)
+            if random.random() < 0.3:
+                self.draw_glazing(x, y, base_size * 0.9, color, alpha * 0.2)
+
+            # MIGLIORAMENTO: Aggiungi dry brush per texture (20% probabilità)
+            if random.random() < 0.2:
+                angle_dry = random.uniform(0, 2 * np.pi)
+                self.draw_dry_brush(x, y, angle_dry, base_size * 0.6, color)
 
     def render_artwork(self, notes: List[Dict], output_path: str):
         """
@@ -297,17 +375,27 @@ class ZornPentatonicPainterly:
         # 1. Disegna percorso melodico
         self.draw_melodic_path(notes, alpha=0.12)
 
-        # 2. Background texture elements
-        for _ in range(8):
+        # 2. MIGLIORAMENTO: Background texture elements (30 invece di 8)
+        for _ in range(30):
             x = random.uniform(100, self.width - 100)
             y = random.uniform(100, self.height - 100)
-            radius = random.uniform(40, 120)
+            radius = random.uniform(30, 100)
 
             # Usa colori Zorn per background
-            bg_color_choice = random.choice(['ochre', 'white', 'black'])
+            bg_color_choice = random.choice(['ochre', 'white', 'black', 'vermilion'])
             bg_color = self.zorn_colors[bg_color_choice]
 
-            self.draw_impasto(x, y, radius, bg_color, alpha=0.15)
+            # MIGLIORAMENTO: Varietà di tecniche per background
+            technique = random.choice(['impasto', 'glazing', 'brushstroke'])
+
+            if technique == 'impasto':
+                self.draw_impasto(x, y, radius, bg_color, alpha=0.12)
+            elif technique == 'glazing':
+                self.draw_glazing(x, y, radius, bg_color, alpha=0.15)
+            else:  # brushstroke
+                angle = random.uniform(0, 2 * np.pi)
+                self.draw_brushstroke(x, y, angle, radius * 1.5,
+                                    radius * 0.3, bg_color, alpha=0.1)
 
         # 3. Renderizza note
         for note in notes:
