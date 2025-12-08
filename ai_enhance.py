@@ -252,6 +252,12 @@ MUSIC_STYLES = {
         "strength": 0.7
     },
 
+    "zorn": {
+        "style": "oil painting",
+        "prompt": "oil painting using ONLY Zorn palette colors: yellow ochre, vermilion red, ivory black, titanium white. NO blue, NO green. Thick impasto brushstrokes, warm earthy tones, expressive, moody, textured canvas, limited palette mastery",
+        "strength": 0.7
+    },
+
     "jazz": {
         "style": "abstract expressionism",
         "prompt": "improvisational abstract art, flowing organic forms, sophisticated color palette, rhythmic",
@@ -292,7 +298,7 @@ def main():
         print("2. export REPLICATE_API_TOKEN='r8_your_token_here'")
         print("\nUSO:")
         print(f"  python {sys.argv[0]} <immagine> [--style <stile>] [--strength <0-1>]")
-        print(f"  python {sys.argv[0]} <immagine> --genre <rock|blues|jazz|metal>")
+        print(f"  python {sys.argv[0]} <immagine> --genre <rock|blues|zorn|jazz|metal>")
         print("\nSTILI:")
         print("  - oil painting (default)")
         print("  - watercolor")
@@ -302,10 +308,12 @@ def main():
         print("  - acrylic")
         print("  - gouache")
         print("\nGENERI MUSICALI (preset):")
-        print("  - rock, blues, jazz, metal, classical, ambient")
+        print("  - rock, blues, zorn, jazz, metal, classical, ambient")
+        print("\nNOTA: 'zorn' usa la palette Zorn (ochre, vermilion, black, white) - NO blue!")
         print("\nESEMPI:")
         print(f"  python {sys.argv[0]} 1207(1)_organic_growth.png")
         print(f"  python {sys.argv[0]} artwork.png --style watercolor")
+        print(f"  python {sys.argv[0]} zorn_pentatonic.png --genre zorn  # Rispetta palette Zorn!")
         print(f"  python {sys.argv[0]} riff.png --genre rock")
         print("="*60)
         sys.exit(1)
