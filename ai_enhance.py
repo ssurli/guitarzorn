@@ -304,7 +304,7 @@ def main():
         print("\nGENERI MUSICALI (preset):")
         print("  - rock, blues, jazz, metal, classical, ambient")
         print("\nESEMPI:")
-        print(f"  python {sys.argv[0]} 1207\(1\)_organic_growth.png")
+        print(f"  python {sys.argv[0]} 1207(1)_organic_growth.png")
         print(f"  python {sys.argv[0]} artwork.png --style watercolor")
         print(f"  python {sys.argv[0]} riff.png --genre rock")
         print("="*60)
