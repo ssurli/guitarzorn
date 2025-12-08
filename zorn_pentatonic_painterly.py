@@ -86,6 +86,141 @@ class ZornPentatonicPainterly:
         texture = gaussian_filter(texture, sigma=1.2)
         return texture
 
+    # ============================================================================
+    # ANALISI MUSICALE CONTESTUALE (Juritz transliteration)
+    # ============================================================================
+
+    def analyze_dynamics(self, notes: List[Dict]) -> Dict:
+        """
+        ENFASI: Analisi dinamica complessiva del riff
+        Restituisce curve di intensità, climax, fade
+        """
+        if not notes:
+            return {'avg': 0.5, 'max': 0.5, 'min': 0.5, 'curve': [], 'climax_idx': 0}
+
+        velocities = [n.get('velocity_value', 0.7) for n in notes]
+
+        result = {
+            'avg': np.mean(velocities),
+            'max': np.max(velocities),
+            'min': np.min(velocities),
+            'range': np.max(velocities) - np.min(velocities),
+            'curve': velocities,
+            'climax_idx': int(np.argmax(velocities)),  # Punto di massima intensità
+            'has_crescendo': self._detect_crescendo(velocities),
+            'has_decrescendo': self._detect_decrescendo(velocities),
+        }
+
+        return result
+
+    def _detect_crescendo(self, velocities: List[float]) -> bool:
+        """Rileva crescendo (aumento progressivo)"""
+        if len(velocities) < 3:
+            return False
+        # Controlla se c'è trend crescente significativo
+        diff = np.diff(velocities)
+        positive_changes = sum(1 for d in diff if d > 0.05)
+        return positive_changes > len(diff) * 0.6
+
+    def _detect_decrescendo(self, velocities: List[float]) -> bool:
+        """Rileva decrescendo (diminuzione progressiva)"""
+        if len(velocities) < 3:
+            return False
+        diff = np.diff(velocities)
+        negative_changes = sum(1 for d in diff if d < -0.05)
+        return negative_changes > len(diff) * 0.6
+
+    def analyze_interval(self, note1: Dict, note2: Dict) -> Dict:
+        """
+        Analizza intervallo tra due note consecutive
+        Restituisce tipo e dimensione intervallo
+        """
+        pitch1 = note1.get('pitch', 60)
+        pitch2 = note2.get('pitch', 60)
+        semitones = abs(pitch2 - pitch1)
+
+        # Classifica intervallo
+        if semitones == 0:
+            interval_type = 'unison'
+        elif semitones <= 2:
+            interval_type = 'step'  # 2nda
+        elif semitones <= 4:
+            interval_type = 'small'  # 3za
+        elif semitones <= 7:
+            interval_type = 'medium'  # 4ta-5ta
+        else:
+            interval_type = 'large'  # 6ta+
+
+        return {
+            'semitones': semitones,
+            'type': interval_type,
+            'direction': 'up' if pitch2 > pitch1 else 'down' if pitch2 < pitch1 else 'same'
+        }
+
+    def analyze_rhythm(self, note: Dict, prev_note: Dict = None) -> Dict:
+        """
+        Analizza caratteristiche ritmiche della nota
+        """
+        duration = note.get('duration', 0.5)
+
+        # Classifica durata
+        if duration < 0.25:
+            rhythm_type = 'very_fast'
+        elif duration < 0.5:
+            rhythm_type = 'fast'
+        elif duration < 1.0:
+            rhythm_type = 'medium'
+        elif duration < 2.0:
+            rhythm_type = 'slow'
+        else:
+            rhythm_type = 'very_slow'
+
+        # Calcola IOI (Inter-Onset Interval) se c'è nota precedente
+        ioi = None
+        if prev_note:
+            ioi = note.get('start_time', 0) - prev_note.get('start_time', 0)
+
+        return {
+            'duration': duration,
+            'type': rhythm_type,
+            'ioi': ioi,
+            'is_staccato': duration < 0.3,
+            'is_legato': duration > 0.8
+        }
+
+    def analyze_melodic_contour(self, notes: List[Dict], window: int = 3) -> List[str]:
+        """
+        Analizza contorno melodico (ascendente/discendente/statico)
+        per ogni finestra di note
+        """
+        if len(notes) < 2:
+            return ['static'] * len(notes)
+
+        contours = []
+        pitches = [n.get('pitch', 60) for n in notes]
+
+        for i in range(len(pitches)):
+            # Guarda finestra intorno alla nota corrente
+            start = max(0, i - window // 2)
+            end = min(len(pitches), i + window // 2 + 1)
+            window_pitches = pitches[start:end]
+
+            if len(window_pitches) < 2:
+                contours.append('static')
+                continue
+
+            # Calcola trend
+            trend = np.polyfit(range(len(window_pitches)), window_pitches, 1)[0]
+
+            if trend > 0.5:
+                contours.append('ascending')
+            elif trend < -0.5:
+                contours.append('descending')
+            else:
+                contours.append('static')
+
+        return contours
+
     def get_note_color(self, note_name: str, velocity: float, octave: int = 4) -> Tuple[np.ndarray, float]:
         """
         Restituisce colore per nota pentatonica + alpha
@@ -568,9 +703,13 @@ class ZornPentatonicPainterly:
                          linewidth=1.5, alpha=alpha)
         self.ax.add_patch(patch)
 
-    def render_note(self, note: Dict):
+    def render_note(self, note: Dict, musical_context: Dict = None):
         """
         Renderizza singola nota con tecnica pittorica
+
+        Args:
+            note: Dati della nota
+            musical_context: Contesto musicale (intervallo, ritmo, dinamica, contorno)
         """
         x = note['x_pos']
         y = note['y_pos']
@@ -587,6 +726,29 @@ class ZornPentatonicPainterly:
 
         # Dimensione base da velocity e durata
         base_size = 30 + velocity * 40 + duration * 20
+
+        # ========================================================================
+        # ENFASI DINAMICA: Modula dimensione e intensità in base al contesto
+        # ========================================================================
+        if musical_context:
+            dynamic_info = musical_context.get('dynamics', {})
+
+            # Amplifica se siamo vicini al climax
+            if 'climax_distance' in musical_context:
+                climax_factor = 1.0 - abs(musical_context['climax_distance'])  # 0-1
+                base_size *= (1.0 + climax_factor * 0.5)  # Fino a +50% al climax
+                alpha *= (1.0 + climax_factor * 0.3)  # Alpha più intensa al climax
+
+            # Crescendo/Decrescendo
+            if dynamic_info.get('has_crescendo'):
+                # In crescendo: aumenta progressivamente intensità tecniche
+                alpha *= 1.2
+            elif dynamic_info.get('has_decrescendo'):
+                # In decrescendo: riduci intensità
+                alpha *= 0.8
+
+            # IMPORTANTE: Clip alpha nel range 0-1
+            alpha = np.clip(alpha, 0.0, 1.0)
 
         # TECNICA → FORMA PITTORICA
         if technique == 'staccato':
@@ -627,37 +789,96 @@ class ZornPentatonicPainterly:
                                 base_size * 0.5, color, alpha * 0.7)
 
         else:
-            # Forma standard: impasto + pennellata + NUOVE TECNICHE
+            # Forma standard: impasto + pennellata + CONTESTO MUSICALE
             self.draw_impasto(x, y, base_size * 0.7, color, alpha)
 
-            # Pennellata decorativa
-            angle = random.uniform(0, 2 * np.pi)
+            # ================================================================
+            # PENNELLATA CON DIREZIONE DA CONTORNO MELODICO
+            # ================================================================
+            angle = random.uniform(0, 2 * np.pi)  # Default casuale
+            if musical_context and 'contour' in musical_context:
+                contour = musical_context['contour']
+                if contour == 'ascending':
+                    # Movimento ascendente → pennellate verso l'alto
+                    angle = -np.pi/2 + random.gauss(0, 0.3)
+                elif contour == 'descending':
+                    # Movimento discendente → pennellate verso il basso
+                    angle = np.pi/2 + random.gauss(0, 0.3)
+                # else 'static' → angle casuale (default)
+
             self.draw_brushstroke(x, y, angle, base_size * 0.8,
                                 base_size * 0.2, color, alpha * 0.6)
 
-            # MIGLIORAMENTO: Aggiungi glazing per profondità (30% probabilità)
-            if random.random() < 0.3:
+            # ================================================================
+            # TECNICHE MUSICALMENTE DERIVATE
+            # ================================================================
+
+            # GLAZING: Intervalli piccoli → texture densa, stratificata
+            glazing_prob = 0.3  # Default
+            if musical_context and 'interval' in musical_context:
+                interval_info = musical_context['interval']
+                if interval_info['type'] in ['unison', 'step']:
+                    glazing_prob = 0.6  # 60% per intervalli piccoli
+                elif interval_info['type'] == 'small':
+                    glazing_prob = 0.4
+
+            if random.random() < glazing_prob:
                 self.draw_glazing(x, y, base_size * 0.9, color, alpha * 0.2)
 
-            # MIGLIORAMENTO: Aggiungi dry brush per texture (20% probabilità)
-            if random.random() < 0.2:
+            # DRY BRUSH: Note veloci → pennellate rapide, interrotte
+            drybrush_prob = 0.2  # Default
+            if musical_context and 'rhythm' in musical_context:
+                rhythm_info = musical_context['rhythm']
+                if rhythm_info['type'] in ['very_fast', 'fast']:
+                    drybrush_prob = 0.7  # 70% per note veloci
+                    angle_dry = random.uniform(0, 2 * np.pi)
+                    self.draw_dry_brush(x, y, angle_dry, base_size * 0.6, color)
+            elif random.random() < drybrush_prob:
                 angle_dry = random.uniform(0, 2 * np.pi)
                 self.draw_dry_brush(x, y, angle_dry, base_size * 0.6, color)
 
-            # NUOVA TECNICA: Dripping Pollock-style (15% probabilità)
-            if random.random() < 0.15:
-                self.draw_dripping(x, y, color, intensity=velocity)
+            # DRIPPING: Movimento discendente + alta dinamica → dripping marcato
+            dripping_intensity = velocity
+            dripping_prob = 0.15  # Default
+            if musical_context:
+                if musical_context.get('contour') == 'descending':
+                    dripping_prob = 0.5  # 50% per discesa
+                    dripping_intensity = velocity * 1.5
+                # Enfasi dinamica: più dripping vicino al climax
+                if 'climax_distance' in musical_context:
+                    climax_factor = 1.0 - abs(musical_context['climax_distance'])
+                    dripping_prob += climax_factor * 0.3
 
-            # NUOVA TECNICA: Splatter marks (25% probabilità)
-            if random.random() < 0.25:
+            if random.random() < dripping_prob:
+                self.draw_dripping(x, y, color, intensity=dripping_intensity)
+
+            # SPLATTER: Alta dinamica → schizzi energetici
+            splatter_prob = 0.25  # Default
+            if musical_context and 'climax_distance' in musical_context:
+                climax_factor = 1.0 - abs(musical_context['climax_distance'])
+                splatter_prob = 0.25 + climax_factor * 0.4  # Fino a 65% al climax
+
+            if random.random() < splatter_prob:
                 self.draw_splatter(x, y, color, intensity=velocity * 0.8)
 
-            # NUOVA TECNICA: Craquelure per invecchiamento (10% probabilità)
-            if random.random() < 0.1:
+            # CRAQUELURE: Note lunghe → effetto invecchiamento
+            craquelure_prob = 0.1  # Default
+            if musical_context and 'rhythm' in musical_context:
+                rhythm_info = musical_context['rhythm']
+                if rhythm_info['type'] in ['slow', 'very_slow']:
+                    craquelure_prob = 0.4  # 40% per note lente
+
+            if random.random() < craquelure_prob:
                 self.draw_craquelure(x, y, base_size * 0.8, color)
 
-            # NUOVA TECNICA: Wet-on-Wet blending (20% probabilità)
-            if random.random() < 0.2:
+            # WET-ON-WET: Intervalli piccoli → colori che si mescolano
+            wetblend_prob = 0.2  # Default
+            if musical_context and 'interval' in musical_context:
+                interval_info = musical_context['interval']
+                if interval_info['type'] in ['unison', 'step', 'small']:
+                    wetblend_prob = 0.5  # 50% per intervalli vicini
+
+            if random.random() < wetblend_prob:
                 # Scegli un secondo colore Zorn casuale per il mixing
                 color2_name = random.choice(['ochre', 'vermilion', 'black', 'white'])
                 color2 = self.zorn_colors[color2_name]
@@ -710,11 +931,46 @@ class ZornPentatonicPainterly:
                 # NUOVA: Dripping nel background
                 self.draw_dripping(x, y, bg_color, intensity=0.4)
 
-        # 3. Renderizza note
-        for note in notes:
-            self.render_note(note)
+        # 3. ANALISI MUSICALE CONTESTUALE (Juritz transliteration)
+        print("   Analizzando contesto musicale...")
 
-        # 4. Salva
+        # Analisi dinamica globale (ENFASI)
+        dynamics_analysis = self.analyze_dynamics(notes)
+        print(f"      Dinamica: avg={dynamics_analysis['avg']:.2f}, "
+              f"range={dynamics_analysis['range']:.2f}, "
+              f"climax @ nota {dynamics_analysis['climax_idx']}")
+
+        # Analisi contorno melodico
+        contours = self.analyze_melodic_contour(notes)
+
+        # 4. Renderizza note CON CONTESTO MUSICALE
+        print("   Renderizzando note con contesto musicale...")
+        for i, note in enumerate(notes):
+            # Costruisci contesto per questa nota
+            musical_context = {
+                'dynamics': dynamics_analysis,
+                'contour': contours[i] if i < len(contours) else 'static',
+            }
+
+            # Distanza dal climax (0 = al climax, 1 = lontano)
+            climax_idx = dynamics_analysis['climax_idx']
+            distance = abs(i - climax_idx) / max(len(notes), 1)
+            musical_context['climax_distance'] = distance
+
+            # Intervallo con nota precedente
+            if i > 0:
+                interval_info = self.analyze_interval(notes[i-1], note)
+                musical_context['interval'] = interval_info
+
+            # Analisi ritmica
+            prev_note = notes[i-1] if i > 0 else None
+            rhythm_info = self.analyze_rhythm(note, prev_note)
+            musical_context['rhythm'] = rhythm_info
+
+            # Renderizza con contesto
+            self.render_note(note, musical_context=musical_context)
+
+        # 5. Salva
         print(f"💾 Salvando: {output_path}")
         self.fig.savefig(output_path,
                         facecolor=self.fig.get_facecolor(),
