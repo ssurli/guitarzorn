@@ -257,6 +257,138 @@ class ZornPentatonicPainterly:
                         alpha=random.uniform(0.4, 0.7),
                         solid_capstyle='round')
 
+    def draw_dripping(self, x: float, y: float, color: np.ndarray, intensity: float = 1.0):
+        """
+        NUOVA TECNICA: Dripping Pollock-style
+        Gocciolature verticali/diagonali dalla nota
+        """
+        num_drips = int(random.randint(2, 5) * intensity)
+
+        for _ in range(num_drips):
+            # Direzione principalmente verso il basso ma con variazione
+            angle = np.pi/2 + random.gauss(0, 0.3)  # ~90° con variazione
+
+            # Lunghezza variabile
+            drip_length = random.uniform(20, 80) * intensity
+
+            # Punto di partenza con offset
+            start_x = x + random.gauss(0, 10)
+            start_y = y + random.gauss(0, 10)
+
+            # Disegna gocciolatura come serie di piccoli segmenti
+            segments = random.randint(5, 10)
+            current_x, current_y = start_x, start_y
+
+            for seg in range(segments):
+                seg_len = drip_length / segments
+                # Aggiungi sinuosità alla goccia
+                angle_var = angle + random.gauss(0, 0.1)
+                end_x = current_x + np.cos(angle_var) * seg_len
+                end_y = current_y + np.sin(angle_var) * seg_len
+
+                # Colore con variazione
+                drip_color = color + np.random.randn(3) * 0.02
+                drip_color = np.clip(drip_color, 0, 1)
+
+                # Spessore che si assottiglia
+                thickness = (1.5 - seg/segments) * random.uniform(0.5, 1.5)
+
+                self.ax.plot([current_x, end_x], [current_y, end_y],
+                           color=drip_color, linewidth=thickness,
+                           alpha=random.uniform(0.3, 0.6),
+                           solid_capstyle='round')
+
+                current_x, current_y = end_x, end_y
+
+    def draw_splatter(self, x: float, y: float, color: np.ndarray, intensity: float = 1.0):
+        """
+        NUOVA TECNICA: Splatter marks (schizzi)
+        Piccole macchie casuali intorno alla nota
+        """
+        num_splatters = int(random.randint(8, 15) * intensity)
+
+        for _ in range(num_splatters):
+            # Posizione casuale attorno al punto
+            angle = random.uniform(0, 2*np.pi)
+            distance = random.uniform(10, 50) * intensity
+            sx = x + np.cos(angle) * distance
+            sy = y + np.sin(angle) * distance
+
+            # Dimensione piccola
+            size = random.uniform(1, 4)
+
+            # Colore con variazione
+            splat_color = color + np.random.randn(3) * 0.05
+            splat_color = np.clip(splat_color, 0, 1)
+
+            # Disegna come piccolo cerchio irregolare
+            circle = Circle((sx, sy), size,
+                          facecolor=splat_color,
+                          edgecolor=None,
+                          alpha=random.uniform(0.3, 0.7))
+            self.ax.add_patch(circle)
+
+    def draw_craquelure(self, x: float, y: float, radius: float, color: np.ndarray):
+        """
+        NUOVA TECNICA: Craquelure (crepe della pittura secca)
+        Rete di piccole crepe per effetto invecchiamento
+        """
+        num_cracks = random.randint(5, 10)
+
+        # Colore scuro per le crepe
+        crack_color = self.zorn_colors['black'] * 0.5
+
+        for _ in range(num_cracks):
+            # Punto di partenza casuale nel raggio
+            start_angle = random.uniform(0, 2*np.pi)
+            start_dist = random.uniform(0, radius * 0.8)
+            start_x = x + np.cos(start_angle) * start_dist
+            start_y = y + np.sin(start_angle) * start_dist
+
+            # Lunghezza della crepa
+            crack_len = random.uniform(radius * 0.2, radius * 0.6)
+            crack_angle = random.uniform(0, 2*np.pi)
+
+            # Disegna crepa come linea spezzata
+            segments = 3
+            current_x, current_y = start_x, start_y
+
+            for seg in range(segments):
+                seg_len = crack_len / segments
+                angle_var = crack_angle + random.gauss(0, 0.3)
+                end_x = current_x + np.cos(angle_var) * seg_len
+                end_y = current_y + np.sin(angle_var) * seg_len
+
+                self.ax.plot([current_x, end_x], [current_y, end_y],
+                           color=crack_color, linewidth=0.3,
+                           alpha=random.uniform(0.2, 0.4))
+
+                current_x, current_y = end_x, end_y
+
+    def apply_canvas_texture(self):
+        """
+        Applica texture canvas effettiva all'immagine
+        """
+        # Crea pattern di texture più visibile
+        for _ in range(50):
+            x = random.uniform(0, self.width)
+            y = random.uniform(0, self.height)
+
+            # Piccole linee per simulare trama del canvas
+            angle = random.choice([0, np.pi/2])  # Orizzontale o verticale
+            length = random.uniform(5, 15)
+
+            end_x = x + np.cos(angle) * length
+            end_y = y + np.sin(angle) * length
+
+            # Colore neutro (variazione dello sfondo)
+            canvas_color = self.zorn_colors['ochre'] * random.uniform(0.95, 1.05)
+            canvas_color = np.clip(canvas_color, 0, 1)
+
+            self.ax.plot([x, end_x], [y, end_y],
+                        color=canvas_color, linewidth=0.5,
+                        alpha=random.uniform(0.1, 0.2))
+
     def draw_melodic_path(self, notes: List[Dict], alpha: float = 0.15):
         """
         Disegna percorso melodico come guida visiva
@@ -365,6 +497,18 @@ class ZornPentatonicPainterly:
                 angle_dry = random.uniform(0, 2 * np.pi)
                 self.draw_dry_brush(x, y, angle_dry, base_size * 0.6, color)
 
+            # NUOVA TECNICA: Dripping Pollock-style (15% probabilità)
+            if random.random() < 0.15:
+                self.draw_dripping(x, y, color, intensity=velocity)
+
+            # NUOVA TECNICA: Splatter marks (25% probabilità)
+            if random.random() < 0.25:
+                self.draw_splatter(x, y, color, intensity=velocity * 0.8)
+
+            # NUOVA TECNICA: Craquelure per invecchiamento (10% probabilità)
+            if random.random() < 0.1:
+                self.draw_craquelure(x, y, base_size * 0.8, color)
+
     def render_artwork(self, notes: List[Dict], output_path: str):
         """
         Renderizza opera completa
@@ -372,11 +516,16 @@ class ZornPentatonicPainterly:
         print(f"🎨 Rendering con palette Zorn (parallelismo pentatonica)...")
         print(f"   {len(notes)} note da renderizzare")
 
+        # 0. NUOVA TECNICA: Applica texture canvas
+        print("   Applicando canvas texture...")
+        self.apply_canvas_texture()
+
         # 1. Disegna percorso melodico
         self.draw_melodic_path(notes, alpha=0.12)
 
-        # 2. MIGLIORAMENTO: Background texture elements (30 invece di 8)
-        for _ in range(30):
+        # 2. MIGLIORAMENTO: Background texture elements (50 invece di 30!)
+        print("   Disegnando background ricco...")
+        for _ in range(50):
             x = random.uniform(100, self.width - 100)
             y = random.uniform(100, self.height - 100)
             radius = random.uniform(30, 100)
@@ -385,17 +534,23 @@ class ZornPentatonicPainterly:
             bg_color_choice = random.choice(['ochre', 'white', 'black', 'vermilion'])
             bg_color = self.zorn_colors[bg_color_choice]
 
-            # MIGLIORAMENTO: Varietà di tecniche per background
-            technique = random.choice(['impasto', 'glazing', 'brushstroke'])
+            # MIGLIORAMENTO: Varietà di tecniche per background + NUOVE TECNICHE
+            technique = random.choice(['impasto', 'glazing', 'brushstroke', 'splatter', 'dripping'])
 
             if technique == 'impasto':
                 self.draw_impasto(x, y, radius, bg_color, alpha=0.12)
             elif technique == 'glazing':
                 self.draw_glazing(x, y, radius, bg_color, alpha=0.15)
-            else:  # brushstroke
+            elif technique == 'brushstroke':
                 angle = random.uniform(0, 2 * np.pi)
                 self.draw_brushstroke(x, y, angle, radius * 1.5,
                                     radius * 0.3, bg_color, alpha=0.1)
+            elif technique == 'splatter':
+                # NUOVA: Splatter nel background
+                self.draw_splatter(x, y, bg_color, intensity=0.5)
+            else:  # dripping
+                # NUOVA: Dripping nel background
+                self.draw_dripping(x, y, bg_color, intensity=0.4)
 
         # 3. Renderizza note
         for note in notes:
