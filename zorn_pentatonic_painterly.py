@@ -891,45 +891,19 @@ class ZornPentatonicPainterly:
         print(f"🎨 Rendering con palette Zorn (parallelismo pentatonica)...")
         print(f"   {len(notes)} note da renderizzare")
 
-        # 0. NUOVA TECNICA: Applica texture canvas
+        # 0. Applica texture canvas (substrato - trama lino)
         print("   Applicando canvas texture...")
         self.apply_canvas_texture()
 
-        # 0.5 SIMBOLI GRAFICI FISSI sulla tela (prima del riff)
-        print("   Disegnando simboli musicali di sfondo...")
-        self.draw_musical_symbols_background()
+        # 0.5 RIMOSSO: Simboli grafici decorativi (non derivati dalla musica)
+        # self.draw_musical_symbols_background()  # ❌ Elementi fissi random
 
-        # 1. Disegna percorso melodico
+        # 1. Disegna percorso melodico (✅ MUSICALE - dalla posizione note)
+        print("   Disegnando percorso melodico...")
         self.draw_melodic_path(notes, alpha=0.12)
 
-        # 2. ULTRA-INTENSO: Background texture saturo (150 elementi!)
-        print("   Disegnando background ultra-ricco...")
-        for _ in range(150):
-            x = random.uniform(100, self.width - 100)
-            y = random.uniform(100, self.height - 100)
-            radius = random.uniform(30, 100)
-
-            # Usa colori Zorn per background
-            bg_color_choice = random.choice(['ochre', 'white', 'black', 'vermilion'])
-            bg_color = self.zorn_colors[bg_color_choice]
-
-            # MIGLIORAMENTO: Varietà di tecniche per background + NUOVE TECNICHE
-            technique = random.choice(['impasto', 'glazing', 'brushstroke', 'splatter', 'dripping'])
-
-            if technique == 'impasto':
-                self.draw_impasto(x, y, radius, bg_color, alpha=0.12)
-            elif technique == 'glazing':
-                self.draw_glazing(x, y, radius, bg_color, alpha=0.15)
-            elif technique == 'brushstroke':
-                angle = random.uniform(0, 2 * np.pi)
-                self.draw_brushstroke(x, y, angle, radius * 1.5,
-                                    radius * 0.3, bg_color, alpha=0.1)
-            elif technique == 'splatter':
-                # NUOVA: Splatter nel background
-                self.draw_splatter(x, y, bg_color, intensity=0.5)
-            else:  # dripping
-                # NUOVA: Dripping nel background
-                self.draw_dripping(x, y, bg_color, intensity=0.4)
+        # 2. RIMOSSO: Background texture random (non derivato dalla musica)
+        # for _ in range(150): ...  # ❌ 150 elementi casuali non musicali
 
         # 3. ANALISI MUSICALE CONTESTUALE (Juritz transliteration)
         print("   Analizzando contesto musicale...")
