@@ -29,6 +29,7 @@ import numpy as np
 import random
 import json
 import subprocess
+import cv2
 
 
 class ZornPentatonicPureLive(ZornPentatonicPainterly):
@@ -37,11 +38,12 @@ class ZornPentatonicPureLive(ZornPentatonicPainterly):
     con capacità di animazione progressiva
     """
 
-    def __init__(self, notes, audio_file=None, fps=30):
+    def __init__(self, notes, audio_file=None, pip_video=None, fps=30):
         """
         Args:
             notes: Lista note da JSON
             audio_file: Path audio per sync e overlay
+            pip_video: Path al video originale per Picture-in-Picture
             fps: Frame per secondo (default 30)
         """
         # Initialize parent class
@@ -49,7 +51,15 @@ class ZornPentatonicPureLive(ZornPentatonicPainterly):
 
         self.all_notes = notes
         self.audio_file = audio_file
+        self.pip_video = pip_video
         self.fps = fps
+
+        # Setup PiP video capture se fornito
+        self.pip_cap = None
+        if pip_video and os.path.exists(pip_video):
+            import cv2
+            self.pip_cap = cv2.VideoCapture(pip_video)
+            print(f"📺 PiP video caricato: {pip_video}")
 
         # Calcola durata totale
         if notes:
@@ -238,11 +248,11 @@ class ZornPentatonicPureLive(ZornPentatonicPainterly):
 
         # Background solo al primo frame
         if not self.background_drawn:
-            print(f"   Frame 0: Canvas texture + Melodic path")
-            # Canvas texture (substrato)
+            print(f"   Frame 0: Canvas texture ONLY (no melodic path)")
+            # Canvas texture (substrato) - UNICO elemento preesistente
             self.apply_canvas_texture()
-            # Melodic path (musicale)
-            self.draw_melodic_path(self.all_notes, alpha=0.12)
+            # RIMOSSO: Melodic path - era un artefatto grafico preesistente
+            # Le note appariranno progressivamente senza percorso predefinito
             self.background_drawn = True
 
         # Renderizza note che dovrebbero essere visibili
@@ -263,6 +273,43 @@ class ZornPentatonicPureLive(ZornPentatonicPainterly):
                 if note_id not in self.drawn_notes_set:
                     self.drawn_notes_set.add(note_id)
                     self.render_note_progressive(note, note_index, growth_factor)
+
+        # ====================================================================
+        # PICTURE-IN-PICTURE: Video originale in alto a destra
+        # ====================================================================
+        if self.pip_cap is not None:
+            # Calcola quale frame del video originale mostrare
+            pip_fps = self.pip_cap.get(cv2.CAP_PROP_FPS)
+            pip_frame_number = int(current_time * pip_fps)
+
+            # Posiziona il video capture al frame corretto
+            self.pip_cap.set(cv2.CAP_PROP_POS_FRAMES, pip_frame_number)
+            ret, pip_frame = self.pip_cap.read()
+
+            if ret:
+                # Converti da BGR (OpenCV) a RGB (matplotlib)
+                pip_frame = cv2.cvtColor(pip_frame, cv2.COLOR_BGR2RGB)
+
+                # Ridimensiona per PiP (esempio: 400x300 pixel)
+                pip_height, pip_width = 300, 400
+                pip_frame = cv2.resize(pip_frame, (pip_width, pip_height))
+
+                # Posizione in alto a destra (coordinate del canvas)
+                pip_x = self.width - pip_width - 50  # 50px margine da destra
+                pip_y = self.height - pip_height - 50  # 50px margine dall'alto
+
+                # Disegna il frame come immagine
+                self.ax.imshow(pip_frame,
+                             extent=[pip_x, pip_x + pip_width, pip_y, pip_y + pip_height],
+                             zorder=1000,  # In primo piano
+                             aspect='auto')
+
+                # Bordo bianco intorno al PiP
+                from matplotlib.patches import Rectangle
+                pip_border = Rectangle((pip_x, pip_y), pip_width, pip_height,
+                                      linewidth=3, edgecolor='white',
+                                      facecolor='none', zorder=1001)
+                self.ax.add_patch(pip_border)
 
         # Titolo con timestamp e info dinamica
         climax_note = self.dynamics_analysis['climax_idx']
@@ -307,6 +354,11 @@ class ZornPentatonicPureLive(ZornPentatonicPainterly):
                 return output_with_audio
 
         plt.close(self.fig)
+
+        # Chiudi video capture PiP
+        if self.pip_cap is not None:
+            self.pip_cap.release()
+
         return output_file
 
     def add_audio_to_video(self, video_file, audio_file):
@@ -346,14 +398,15 @@ def load_notes_from_json(json_path: str):
 
 def main():
     if len(sys.argv) < 2:
-        print("Uso: python zorn_pentatonic_pure_live.py <notes.json> [audio.wav] [output.mp4]")
+        print("Uso: python zorn_pentatonic_pure_live.py <notes.json> [audio.wav] [pip_video.mp4] [output.mp4]")
         print("\nEsempio:")
-        print("  python zorn_pentatonic_pure_live.py 1207(1)_notes.json 1207(1)_audio.wav")
+        print("  python zorn_pentatonic_pure_live.py 1207(1)_notes.json 1207(1)_audio.wav 1207(1).mp4")
         sys.exit(1)
 
     input_json = sys.argv[1]
     audio_file = sys.argv[2] if len(sys.argv) > 2 else None
-    output_mp4 = sys.argv[3] if len(sys.argv) > 3 else 'zorn_pentatonic_pure_live.mp4'
+    pip_video = sys.argv[3] if len(sys.argv) > 3 else None
+    output_mp4 = sys.argv[4] if len(sys.argv) > 4 else 'zorn_pentatonic_pure_live.mp4'
 
     # Carica note
     print(f"📖 Caricando note da: {input_json}")
@@ -384,8 +437,8 @@ def main():
 
     print(f"   {len(notes)} note pronte")
 
-    # Genera video
-    renderer = ZornPentatonicPureLive(notes, audio_file, fps=30)
+    # Genera video con PiP opzionale
+    renderer = ZornPentatonicPureLive(notes, audio_file, pip_video, fps=30)
     output = renderer.generate_video(output_mp4)
 
     print(f"\n✅ COMPLETATO!")
