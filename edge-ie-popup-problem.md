@@ -79,26 +79,47 @@ if (!popup || popup.closed || typeof popup.closed == 'undefined') {
 - Scadenza: 2025/12/17
 - Ricaricamento automatico in modalità IE: ATTIVO
 
-**⚠️ Nota:** La configurazione scade il 17/12/2025, verrà rinnovata automaticamente all'accesso
+**✅ Popup Autorizzati:**
+- https://protocollo.ssr.uslnordovest.toscana.it (HTTPS)
+- http://protocollo.ssr.uslnordovest.toscana.it:80 (HTTP)
 
-## Informazioni Necessarie per Diagnosi Completa
+**✅ Versione Edge:**
+- 143.0.3650.75 (Build ufficiale) (64 bit)
+
+**❌ PROBLEMA CRITICO: F12 Blocca l'Applicazione**
+- Quando si preme F12, l'applicazione si blocca e non procede
+- Possibile causa: Codice anti-debug o incompatibilità strumenti dev con modalità IE
+- Soluzione: Analisi diretta del codice sorgente con Ctrl+U
+
+**⚠️ Nota:** La configurazione modalità IE scade il 17/12/2025, verrà rinnovata automaticamente all'accesso
+
+## Stato Diagnosi
 
 1. ✅ **URL completo**: https://protocollo.ssr.uslnordovest.toscana.it/adweb/jsp/index.htm
 2. ✅ **Modalità IE**: Configurata correttamente
-3. ⏳ **Errori JavaScript**: Console browser (F12) quando si tenta di firmare - DA VERIFICARE
-4. ⏳ **Pagina specifica del popup**: Serve il codice della pagina che contiene il bottone "Firma" - DA OTTENERE
-5. ⏳ **Tipo di firma digitale**: È un controllo ActiveX? Un applet Java? Un plugin? Smart card/token USB? - DA VERIFICARE
-6. ⏳ **Versione Edge**: Versione corrente e target del downgrade - DA VERIFICARE
-7. ⏳ **Configurazione popup**: Verifica se i popup sono consentiti per il dominio - DA VERIFICARE
+3. ✅ **Versione Edge**: 143.0.3650.75 (64 bit)
+4. ✅ **Configurazione popup**: Autorizzati per dominio (HTTP e HTTPS)
+5. ❌ **Errori JavaScript**: F12 blocca applicazione - impossibile usare console
+6. ⏳ **Pagina specifica del popup**: Serve codice sorgente (Ctrl+U) della pagina con bottone "Firma"
+7. ⏳ **Tipo di firma digitale**: È un controllo ActiveX? Un applet Java? Un plugin? Smart card/token USB?
+8. ⏳ **Analisi codice**: Necessaria analisi diretta del JavaScript che gestisce il popup
 
-## Debugging Steps
+## Debugging Steps (Aggiornati per problema F12)
 
-1. Aprire F12 PRIMA di cliccare su "Firma"
-2. Andare in tab "Console"
-3. Cliccare su "Firma"
-4. Catturare eventuali errori rossi
-5. Verificare tab "Network" per richieste fallite
-6. Controllare se appare icona IE nella barra indirizzi (conferma modalità IE attiva)
+**⚠️ F12 NON UTILIZZABILE** - blocca l'applicazione
+
+**Metodo Alternativo:**
+1. Sulla pagina della delibera (con bottone "Firma"), premere **Ctrl+U**
+2. Si apre visualizzazione codice sorgente
+3. Premere **Ctrl+F** e cercare: `firma`, `window.open`, `popup`, `showModalDialog`
+4. Copiare tutto il codice JavaScript trovato vicino a questi termini
+5. Analizzare il codice per identificare problemi di compatibilità
+6. Applicare patch/fix al codice se possibile
+
+**Informazioni da Raccogliere:**
+- Tipo di dispositivo firma (smart card, token USB, software)
+- Cosa succede ESATTAMENTE quando si clicca "Firma" (nessuna reazione, errore visibile, pagina si blocca?)
+- Il popup si è mai aperto con versioni precedenti di Edge? Quale versione?
 
 ## File da Analizzare
 
