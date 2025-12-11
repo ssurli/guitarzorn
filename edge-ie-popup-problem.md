@@ -71,13 +71,25 @@ if (!popup || popup.closed || typeof popup.closed == 'undefined') {
 }
 ```
 
+## Configurazione Attuale Edge
+
+**✅ Modalità IE Configurata Correttamente:**
+- URL: https://protocollo.ssr.uslnordovest.toscana.it/adweb/jsp/index.htm
+- Data aggiunta: 2025/11/17
+- Scadenza: 2025/12/17
+- Ricaricamento automatico in modalità IE: ATTIVO
+
+**⚠️ Nota:** La configurazione scade il 17/12/2025, verrà rinnovata automaticamente all'accesso
+
 ## Informazioni Necessarie per Diagnosi Completa
 
-1. **Pagina specifica del popup**: Serve il codice della pagina che contiene il bottone "Firma"
-2. **Errori JavaScript**: Console browser (F12) quando si tenta di firmare
-3. **Tipo di firma digitale**: È un controllo ActiveX? Un applet Java? Un plugin?
-4. **URL completo**: Dell'applicazione per verificare configurazioni
-5. **Versione Edge**: Versione corrente e target del downgrade
+1. ✅ **URL completo**: https://protocollo.ssr.uslnordovest.toscana.it/adweb/jsp/index.htm
+2. ✅ **Modalità IE**: Configurata correttamente
+3. ⏳ **Errori JavaScript**: Console browser (F12) quando si tenta di firmare - DA VERIFICARE
+4. ⏳ **Pagina specifica del popup**: Serve il codice della pagina che contiene il bottone "Firma" - DA OTTENERE
+5. ⏳ **Tipo di firma digitale**: È un controllo ActiveX? Un applet Java? Un plugin? Smart card/token USB? - DA VERIFICARE
+6. ⏳ **Versione Edge**: Versione corrente e target del downgrade - DA VERIFICARE
+7. ⏳ **Configurazione popup**: Verifica se i popup sono consentiti per il dominio - DA VERIFICARE
 
 ## Debugging Steps
 
