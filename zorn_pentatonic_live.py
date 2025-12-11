@@ -17,7 +17,7 @@ MANTIENE REPLICABILITÀ: stesso JSON + audio = stesso video
 
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, FFMpegWriter
-from matplotlib.patches import Circle, Polygon
+from matplotlib.patches import Circle, Polygon, Ellipse
 import numpy as np
 import random
 import json
@@ -223,6 +223,64 @@ class ZornPentatonicLive:
                         alpha=random.uniform(0.4, 0.7),
                         solid_capstyle='round')
 
+    def draw_musical_symbols_background(self):
+        """SIMBOLI GRAFICI FISSI sulla tela PRIMA del riff"""
+        symbol_colors = [
+            self.zorn_colors['black'] * 0.6,
+            self.zorn_colors['vermilion'] * 0.5,
+            self.zorn_colors['ochre'] * 0.8
+        ]
+
+        # Pentagrammi
+        for i in range(random.randint(2, 3)):
+            y_staff = random.uniform(200, self.height - 200)
+            color = random.choice(symbol_colors)
+            for line_num in range(5):
+                y_line = y_staff + line_num * 25
+                segments = 20
+                x_vals = np.linspace(100, self.width - 100, segments)
+                y_vals = np.array([y_line + random.gauss(0, 2) for _ in range(segments)])
+                self.ax.plot(x_vals, y_vals, color=color, linewidth=1.5, alpha=random.uniform(0.15, 0.25))
+
+        # Chiavi musicali
+        for _ in range(random.randint(1, 2)):
+            x_clef = random.uniform(150, 400)
+            y_clef = random.uniform(300, self.height - 300)
+            color = random.choice(symbol_colors)
+            t = np.linspace(0, 4*np.pi, 100)
+            r = 30 + t * 8
+            spiral_x = x_clef + r * np.cos(t) + np.random.randn(100) * 3
+            spiral_y = y_clef + r * np.sin(t) - t * 15 + np.random.randn(100) * 3
+            self.ax.plot(spiral_x, spiral_y, color=color, linewidth=3, alpha=random.uniform(0.2, 0.3))
+
+        # Note decorative
+        for _ in range(random.randint(5, 8)):
+            x_note = random.uniform(200, self.width - 200)
+            y_note = random.uniform(200, self.height - 200)
+            color = random.choice(symbol_colors)
+            note_head = Ellipse((x_note, y_note), 20, 15, angle=random.uniform(-30, 30),
+                               facecolor=color, edgecolor=None, alpha=random.uniform(0.15, 0.25))
+            self.ax.add_patch(note_head)
+            stem_length = random.uniform(60, 90)
+            stem_x = [x_note + 10, x_note + 10 + random.gauss(0, 2)]
+            stem_y = [y_note, y_note + stem_length]
+            self.ax.plot(stem_x, stem_y, color=color, linewidth=2.5, alpha=random.uniform(0.15, 0.25))
+
+        # Tastiera chitarra
+        x_fret = random.uniform(self.width - 400, self.width - 150)
+        y_fret_start = random.uniform(200, 400)
+        color = self.zorn_colors['black'] * 0.5
+        for string in range(6):
+            y_string = y_fret_start + string * 30
+            string_x = [x_fret, x_fret + 200]
+            string_y = [y_string + random.gauss(0, 1), y_string + random.gauss(0, 1)]
+            self.ax.plot(string_x, string_y, color=color, linewidth=1, alpha=random.uniform(0.12, 0.2))
+        for fret in range(5):
+            x_fret_line = x_fret + fret * 40
+            fret_x = [x_fret_line, x_fret_line]
+            fret_y = [y_fret_start, y_fret_start + 5 * 30]
+            self.ax.plot(fret_x, fret_y, color=color, linewidth=1.5, alpha=random.uniform(0.12, 0.2))
+
     def draw_background_elements(self):
         """Disegna background ricco (una volta sola all'inizio)"""
         for _ in range(30):
@@ -319,6 +377,7 @@ class ZornPentatonicLive:
 
         # Disegna background solo al primo frame
         if not self.background_drawn:
+            self.draw_musical_symbols_background()  # SIMBOLI FISSI prima
             self.draw_background_elements()
             self.background_drawn = True
 

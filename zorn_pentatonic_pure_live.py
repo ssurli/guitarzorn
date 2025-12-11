@@ -29,6 +29,7 @@ import numpy as np
 import random
 import json
 import subprocess
+import cv2
 
 
 class ZornPentatonicPureLive(ZornPentatonicPainterly):
@@ -42,7 +43,7 @@ class ZornPentatonicPureLive(ZornPentatonicPainterly):
         Args:
             notes: Lista note da JSON
             audio_file: Path audio per sync e overlay
-            pip_video: Path al video originale per Picture-in-Picture (opzionale)
+            pip_video: Path al video originale per Picture-in-Picture
             fps: Frame per secondo (default 30)
         """
         # Initialize parent class
@@ -56,6 +57,7 @@ class ZornPentatonicPureLive(ZornPentatonicPainterly):
         # Setup PiP video capture se fornito
         self.pip_cap = None
         if pip_video and os.path.exists(pip_video):
+            import cv2
             self.pip_cap = cv2.VideoCapture(pip_video)
             print(f"📺 PiP video caricato: {pip_video}")
 
@@ -272,6 +274,43 @@ class ZornPentatonicPureLive(ZornPentatonicPainterly):
                     self.drawn_notes_set.add(note_id)
                     self.render_note_progressive(note, note_index, growth_factor)
 
+        # ====================================================================
+        # PICTURE-IN-PICTURE: Video originale in alto a destra
+        # ====================================================================
+        if self.pip_cap is not None:
+            # Calcola quale frame del video originale mostrare
+            pip_fps = self.pip_cap.get(cv2.CAP_PROP_FPS)
+            pip_frame_number = int(current_time * pip_fps)
+
+            # Posiziona il video capture al frame corretto
+            self.pip_cap.set(cv2.CAP_PROP_POS_FRAMES, pip_frame_number)
+            ret, pip_frame = self.pip_cap.read()
+
+            if ret:
+                # Converti da BGR (OpenCV) a RGB (matplotlib)
+                pip_frame = cv2.cvtColor(pip_frame, cv2.COLOR_BGR2RGB)
+
+                # Ridimensiona per PiP (esempio: 400x300 pixel)
+                pip_height, pip_width = 300, 400
+                pip_frame = cv2.resize(pip_frame, (pip_width, pip_height))
+
+                # Posizione in alto a destra (coordinate del canvas)
+                pip_x = self.width - pip_width - 50  # 50px margine da destra
+                pip_y = self.height - pip_height - 50  # 50px margine dall'alto
+
+                # Disegna il frame come immagine
+                self.ax.imshow(pip_frame,
+                             extent=[pip_x, pip_x + pip_width, pip_y, pip_y + pip_height],
+                             zorder=1000,  # In primo piano
+                             aspect='auto')
+
+                # Bordo bianco intorno al PiP
+                from matplotlib.patches import Rectangle
+                pip_border = Rectangle((pip_x, pip_y), pip_width, pip_height,
+                                      linewidth=3, edgecolor='white',
+                                      facecolor='none', zorder=1001)
+                self.ax.add_patch(pip_border)
+
         # Titolo con timestamp e info dinamica
         climax_note = self.dynamics_analysis['climax_idx']
         self.ax.set_title(
@@ -315,6 +354,11 @@ class ZornPentatonicPureLive(ZornPentatonicPainterly):
                 return output_with_audio
 
         plt.close(self.fig)
+
+        # Chiudi video capture PiP
+        if self.pip_cap is not None:
+            self.pip_cap.release()
+
         return output_file
 
     def add_audio_to_video(self, video_file, audio_file):
@@ -394,7 +438,7 @@ def main():
     print(f"   {len(notes)} note pronte")
 
     # Genera video con PiP opzionale
-    renderer = ZornPentatonicPureLive(notes, audio_file, pip_video=pip_video, fps=30)
+    renderer = ZornPentatonicPureLive(notes, audio_file, pip_video, fps=30)
     output = renderer.generate_video(output_mp4)
 
     print(f"\n✅ COMPLETATO!")
