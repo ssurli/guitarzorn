@@ -1,0 +1,265 @@
+<html>
+<head>
+
+
+<script language="JavaScript">
+var base = "";
+function f_setContext()
+{
+    var appProtcol = "";
+    var appHost = "";
+    var appContext = "";
+    var scriba = "";
+    appProtcol = document.location.protocol + "//";
+    appHost = document.location.host;
+    appContext = "/adweb";
+    base = appProtcol + appHost + appContext + "/";
+    scriba = '<base href=' + base + '>';
+
+    document.write (scriba);
+}
+f_setContext();
+</script>
+
+<link rel="stylesheet" type="text/css" href="css/adweb.css">
+<!--meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-15"-->
+<meta http-equiv="Expires" content="-1">
+<meta name="robots" content="noindex, nofollow, noarchive" />
+<SCRIPT language="JavaScript" type="text/javascript" src="jsp/js/Calendario.js" ></SCRIPT>
+<SCRIPT language="JavaScript" type="text/javascript" src="jsp/js/utils.js" ></SCRIPT>
+<SCRIPT language="JavaScript" type="text/javascript" src="jsp/js/functions.js" ></SCRIPT>
+<SCRIPT language="JavaScript" type="text/javascript" src="jsp/js/rowSelect.js" ></SCRIPT>
+<script language="JavaScript" type="text/javascript" src="jsp/js/contextMenu.js"></script>
+
+<script type="text/javascript" src="js/jquery-1.4.3.js"></script>
+
+<title>JFfirma</title>
+<script type="text/javascript">
+	var frameName = parent.frames[1].name;
+
+	window.onload = function(){
+
+	  url = '../jsp/zz_bottoni.jsp?bottoni=Annulla fBack';
+
+
+	  if ('firmaSingola' == 'firmaSingola')
+	    url = url + "&frameName=" + frameName;
+	  else{
+	   url = url + "&frameName=MFprincipale";
+
+	   parent.frames["MFconferma"].location.href = "../html/blank.htm";
+	  }
+
+	  fButtons(url);
+}
+
+function fBack(){
+  if ('firmaSingola' == 'firmaSingola')
+    parent.frames[frameName].location.href = "../servlet/DLBServletMain?as_context=documento&as_button=gestione&codGestPrat=OTR||2025-001-3853&codPrat=2025-001-3853&tipoPrat=OTR&visualizzaDoc=false";
+  else
+    parent.frames["MFprincipale"].location.href = "../jsp/MFpratiche.jsp";
+}
+
+function fChiudi(){
+  if ('firmaSingola' == 'firmaSingola'){
+    parent.frames[frameName].location.href = "../servlet/DLBServletMain?as_context=documento&as_button=gestione&codGestPrat=OTR||2025-001-3853&codPrat=2025-001-3853&tipoPrat=OTR&visualizzaDoc=false";
+  }
+  else
+    eval(top.parent.frames["menu"].fSubmit('MULTIFIRMA'));
+}
+
+function fRifirma(){
+  document.main.target = 'MFprincipale';
+  document.main.as_context.value = 'multifirma';
+  document.main.as_button.value = 'rifirma';
+  document.main.action= 'servlet/DLBServletMain';
+  document.main.submit();
+}
+
+function fArchiviazione() {
+  if (!window.confirm("Si   sicuri di voler archiviare le pratiche appena firmate?"))
+	  return;
+  // submit..
+  parent.frames["MFprincipale"].location.href = "../jsp/GParchiviazionePraticheEsito.jsp?fromPage=firmaMultipla";
+}
+
+//MANTIS 35869
+function fSpostamento() {
+  if (!window.confirm("Si   sicuri di voler spostare le pratiche appena firmate?"))
+	  return;
+  // submit..
+  parent.frames["MFprincipale"].location.href = "../jsp/GPspostamentoPratiche.jsp?fromPage=firmaMultipla&frameName=MFprincipale";
+}
+
+//MANTIS 35869
+function fAssegnazione() {
+	  if (!window.confirm("Si   sicuri di voler assegnare le pratiche appena firmate?"))
+		  return;
+	  // submit..
+	  parent.frames["MFprincipale"].location.href = "../jsp/GPassegnazionePratiche.jsp?fromPage=firmaMultipla&frameName=MFprincipale";
+}
+
+</script>
+</head>
+<body>
+<br />
+<div align="center" class="textBold">Documenti in firma</div>
+<br />
+
+<table border="0" width="100%">
+
+            <tr>
+              <td></td>
+
+                <td></td>
+            </tr>
+
+          <tr>
+            <td width='10px'>&nbsp;</td>
+            <td width='20%'><b>Atto:&nbsp;</b><font style="color:red">2025/3853</font></td>
+            <td width='80%'><b>Oggetto:&nbsp;</b>[dtsa] MANUTENZIONE LIFEMOBILE E NOWHERE ANNO 2026  CIG: B9615EE92C</td>
+          </tr>
+
+
+<!--        Dati di ogni singolo documento da firmare.
+            Come primo parametro aggiungo C+num per identificare, con id, la riga dll'input check
+            per modificarne il valore in caso di firma fallita
+            ATTENZIONE: come separatore uso il | e non il : come tra i parametri successivi  -->
+            <tr>
+              <td></td>
+              <td><img src="images/lista.gif" border=0><B>DECRETO.odt<img src="images/blank.gif" border=0><img name="K323929" src="images/blank.gif" align="top"></B></td>
+            </tr>
+
+
+</table>
+<br />
+
+
+
+
+		<p align="center" id="esitoFirma" style="display: none;">Documenti firmati con successo</p>
+
+
+		<p align="center" id="esitoFirmaKO" style="display: none;"><b>ATTENZIONE: si e' verificato un errore durante il processo di firma digitale del documento. Ritentare l'operazione e nel caso il problema dovesse persistere contattare l'assistenza</b></p>
+
+
+
+<object classid="clsid:8AD9C840-044E-11D1-B3E9-00805F499D93"
+		width="600"
+		height="300"
+		align="middle"
+		standby="PkNet Java applet Loading ..."
+		codebase="http://java.sun.com/products/plugin/autodl/jinstall-1_6_10-windows-i586.cab#Version=1,2,2,0"
+>
+	<param name="code" value="com.intesi.pknet.applet.PkNetApplet.class" />
+	<param name="ARCHIVE" value = "pknetjappl.jar, pknetj.jar, itext-1.4.jar" />
+	<param name="codebase" value="../applet" />
+	<param name="type" value="application/x-java-applet;version=1.2.2" />
+
+	<param name="Action" value = "SIGN" />
+	<param name="DocumentURL" value = "https://protocollo.ssr.uslnordovest.toscana.it:443/adweb/servlet/DCdownload?idDocument=323929&sign=true&modifica=true&versionDoc=-1&descrUser=Surlinelli%20%20Stefano" />
+	<param name="PostURL" value = "https://protocollo.ssr.uslnordovest.toscana.it:443/adweb/servlet/DCupload?idFolder=323929&docname=DECRETO.odt.p7m&descrUser=Surlinelli%20%20Stefano&checkin=true&versionComment=FIRMATO&idc=1&codgestprat=OTR||2025-001-3853&signType=firmaSingola"/>
+
+	<param name="ImageFile" value = "https://protocollo.ssr.uslnordovest.toscana.it:443/adweb/applet/pknet-Insiel_mercato.1.9.41.gif.p7m" />
+	<param name="scriptable" value="true" />
+	<param name="progressbar" value = "true" />
+	<param name="boxmessage" value = "PkNet Java applet Loading ..." />
+	<param name="HashAlgorithm" value = "sha256" />
+	<param name="CredTypeFilter" value="1" />
+	<param name="ValidCredFilter" value="1" />
+	<param name="PIN_2NDAUTH_MODE" value="-1" />
+
+
+
+
+
+
+
+	<comment>
+		<embed type="application/x-java-applet;version=1.2.2"
+			width="600"
+			height="300"
+			code="com.intesi.pknet.applet.PkNetApplet.class"
+			archive="pknetjappl.jar, pknetj.jar, itext-1.4.jar"
+			codebase="../applet"
+			ImageFile="https://protocollo.ssr.uslnordovest.toscana.it:443/adweb/applet/pknet-Insiel_mercato.1.9.41.gif.p7m"
+
+			DocumentURL= "https://protocollo.ssr.uslnordovest.toscana.it:443/adweb/servlet/DCdownload?idDocument=323929&sign=true&modifica=true&versionDoc=-1&descrUser=Surlinelli%20%20Stefano"
+			Action="SIGN"
+			PostURL="https://protocollo.ssr.uslnordovest.toscana.it:443/adweb/servlet/DCupload?idFolder=323929&docname=DECRETO.odt.p7m&descrUser=Surlinelli%20%20Stefano&checkin=true&versionComment=FIRMATO&idc=1&codgestprat=OTR||2025-001-3853&signType=firmaSingola"
+
+			progressbar="true"
+			boxmessage="PkNet Java applet Loading ..."
+			pluginspage="http://java.sun.com/products/plugin/index.html#download"
+			HashAlgorithm="sha256"
+			CredTypeFilter="1"
+			ValidCredFilter="1"
+			PIN_2NDAUTH_MODE="-1"
+
+		>
+			<noembed>
+				No Java 2 SDK support for APPLET!!
+			</noembed>
+		</embed>
+	</comment>
+</object>
+
+
+
+
+
+		<form name="main" method="post">
+
+
+
+
+<input type=hidden name=as_context value='multifirma'>
+<input type=hidden name=as_button value='firmasingola'>
+
+		  <input type="hidden" name="codGestPrat" value="OTR||2025-001-3853">
+		  <input type="hidden" name="nomeDoc" value="DECRETO.odt">
+		  <input type="hidden" name="codPrat" value="2025-001-3853">
+		  <input type="hidden" name="tipoPrat" value="OTR">
+		  <input type="hidden" name="descAttivita">
+		  <input type="hidden" name="tipoTraccia">
+		  <input type="hidden" name="targetUrl">
+		</form>
+		</body>
+
+
+
+<script type="text/javascript">
+
+function sbloccaPratica(tipoPrat, codPrat){
+  codGestPrat = tipoPrat + "||" + codPrat;
+  top.parent.frames["nascosto"].location.href = "../jsp/f_PraUnlock.jsp?codPrat=" + codGestPrat;
+}
+
+function noInvia(par1,par2){
+  // imposto CODPRAT,N
+  var nuovaF;
+  nuovaF = new Function("formFirma."+ par1 +".value = '"+ par2+ ",N'");
+  nuovaF();
+}
+
+function changeImages() {
+	document[changeImages.arguments[0]].src = changeImages.arguments[1];
+  	document[changeImages.arguments[0]].alt = changeImages.arguments[2];
+}
+
+function fConferma(){
+	document.formMain.submit();
+}
+
+function showSignResult(url){
+	fButtons(url);
+	document.getElementById("esitoFirma").style.display="block";
+}
+
+function showSignResultKO(url){
+	fButtons(url);
+	document.getElementById("esitoFirmaKO").style.display="block";
+}
+
+</script>
+</html>

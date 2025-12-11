@@ -100,9 +100,28 @@ if (!popup || popup.closed || typeof popup.closed == 'undefined') {
 3. ✅ **Versione Edge**: 143.0.3650.75 (64 bit)
 4. ✅ **Configurazione popup**: Autorizzati per dominio (HTTP e HTTPS)
 5. ❌ **Errori JavaScript**: F12 blocca applicazione - impossibile usare console
-6. ⏳ **Pagina specifica del popup**: Serve codice sorgente (Ctrl+U) della pagina con bottone "Firma"
-7. ⏳ **Tipo di firma digitale**: È un controllo ActiveX? Un applet Java? Un plugin? Smart card/token USB?
-8. ⏳ **Analisi codice**: Necessaria analisi diretta del JavaScript che gestisce il popup
+6. ✅ **Codice sorgente analizzato**: JFfirma.jsp - pagina firma digitale
+7. ✅ **Tipo di firma digitale**: **Java Applet (PkNet di Intesi Group)**
+8. ✅ **Causa del problema**: Edge NON supporta Java Applet (tecnologia obsoleta)
+
+## 🎯 PROBLEMA IDENTIFICATO
+
+**Il sistema NON usa popup, ma un Java Applet per la firma digitale.**
+
+### Dettagli Tecnici:
+- **Sistema**: PkNet di Intesi Group
+- **Componente**: `com.intesi.pknet.applet.PkNetApplet.class`
+- **JAR files**: pknetjappl.jar, pknetj.jar, itext-1.4.jar
+- **Tag HTML**: `<object classid="clsid:8AD9C840-044E-11D1-B3E9-00805F499D93">`
+
+### Perché Non Funziona:
+- Java Applet è obsoleto dal 2017
+- Edge (e tutti i browser moderni) NON supportano Java Applet
+- Edge modalità IE NON è compatibile con Java Applet
+- Serve Internet Explorer 11 nativo con Java installato
+
+### Soluzione:
+Vedere file: **soluzione-firma-java-applet.md** per procedure dettagliate.
 
 ## Debugging Steps (Aggiornati per problema F12)
 
