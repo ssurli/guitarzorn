@@ -1,0 +1,61 @@
+<html>
+<head>
+    <meta http-equiv="Expires" content="Mon, 1 Jan 2001 00:00:00 GMT">
+    <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+    <link rel="stylesheet" type="text/css" href="../css/adweb.css">
+    <title>Office WEB - Atti Deliberativi</title>
+    <script language="javaScript">
+// togliere i commenti in caso di apertura in una nuova finestra
+/*
+  window.onload = function() {
+    win = window.open('index2.htm','index','directories=0,height=600,width=800,location=0,menubar=0,toolbar=0,resizable=1',false)
+  }
+*/
+
+var repeat=0 //enter 0 to not repeat scrolling after 1 run, othersise, enter 1
+var title=document.title
+var leng=title.length
+var start=1
+function titlemove() {
+  titl=title.substring(start, leng) + title.substring(0, start)
+  document.title=titl
+  start++
+  if (start==leng+1) {
+    start=0
+    if (repeat==0)
+    return
+  }
+  setTimeout("titlemove()",140)
+}
+if (document.title)
+titlemove()
+    </script>
+    </script>
+</head>
+<!-- da commentare in caso di apertura in una nuova finestra, da INIZIO a FINE-->
+<!-- INIZIO -->
+<frameset rows="21,*,0,0,0" frameborder="no" border="0" framespacing="0">
+    <frame name="topbar" id="topbar" src="../servlet/DLBServletMain?NOME_ENTE=Y&ENTE=1" noresize marginwidth="0" marginheight="0" scrolling="no">
+    <frameset name="menuAndMain"  cols="225,*" border="0" framespacing="0" frameborder="0">
+        <frameset name="leftSide" rows="*,50" frameborder="NO" border="0" framespacing="0">
+            <frame name="menu" src="zz_menu_vuoto.jsp"  marginwidth="0" marginheight="0" noresize frameborder="0" scrolling="no">
+            <frame name="esci" src="zz_menu_vuoto.jsp"  marginwidth="0" marginheight="0" noresize frameborder="0" scrolling="NO">
+        </frameset>
+        <frameset name="fsMain" rows="*,50" frameborder="NO" border="0" framespacing="0">
+            <frame name="work" src="login.jsp" frameborder="NO" noresize scrolling="AUTO" marginwidth="0" marginheight="0">
+            <frame name="bottoni" src="../html/blank.htm" marginwidth="0" marginheight="0" scrolling="auto" noresize>
+            </frameset>
+    </frameset>
+    <frame src="../html/blank.htm" name="nascosto" frameborder="NO" noresize scrolling="no" marginwidth="0" marginheight="0">
+    <frame src="../html/blank.htm" name="nascosto2" frameborder="NO" noresize scrolling="no" marginwidth="0" marginheight="0">
+    <frame src="../html/close.htm" name="chiusura" frameborder="NO" noresize scrolling="no" marginwidth="0" marginheight="0">
+</frameset>
+<noframes>
+    <body>
+        <p>La pagina corrente utilizza dei frame, che tuttavia non sono supportati
+        dal browser in uso.</p>
+    </body>
+</noframes>
+</frameset>
+<!-- FINE -->
+</html>
