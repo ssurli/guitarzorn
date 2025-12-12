@@ -32,6 +32,14 @@ env/
 *.swo
 *~
 
+# Node.js
+node_modules/
+npm-debug.log
+package-lock.json
+
+# Frames output
+frames/
+
 # OS
 .DS_Store
 Thumbs.db
