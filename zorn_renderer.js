@@ -620,6 +620,14 @@ function playAnimation() {
   document.getElementById('playBtn').disabled = true;
   document.getElementById('pauseBtn').disabled = false;
 
+  // Start audio playback
+  const audio = document.getElementById('audioPlayer');
+  audio.currentTime = currentFrame / fps;
+  audio.play().catch(err => {
+    console.warn('Audio playback failed:', err);
+    // Continue animation even if audio fails
+  });
+
   fps = parseInt(document.getElementById('fpsSelect').value);
   const lastNote = notes[notes.length - 1];
   const totalDuration = lastNote.start_time + lastNote.duration + 1.0;
@@ -637,7 +645,7 @@ function playAnimation() {
     const time = (currentFrame / fps).toFixed(2);
     document.getElementById('info').innerHTML = `
       <div class="progress">▶ Playing: Frame ${currentFrame + 1}/${totalFrames} (${progress}%)</div>
-      <div>Time: ${time}s / ${totalDuration.toFixed(1)}s</div>
+      <div>Time: ${time}s / ${totalDuration.toFixed(1)}s | 🔊 Audio</div>
     `;
 
     currentFrame++;
@@ -650,6 +658,11 @@ function pauseAnimation() {
     clearInterval(animationInterval);
     animationInterval = null;
   }
+
+  // Pause audio
+  const audio = document.getElementById('audioPlayer');
+  audio.pause();
+
   document.getElementById('playBtn').disabled = false;
   document.getElementById('pauseBtn').disabled = true;
 
@@ -662,6 +675,11 @@ function pauseAnimation() {
 function resetAnimation() {
   pauseAnimation();
   currentFrame = 0;
+
+  // Reset audio to beginning
+  const audio = document.getElementById('audioPlayer');
+  audio.currentTime = 0;
+
   renderFrame(0);
 
   document.getElementById('info').innerHTML = `
