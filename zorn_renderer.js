@@ -302,30 +302,30 @@ function applyCanvasTexture() {
 // ============================================================================
 // PAINTERLY TECHNIQUES (Paper.js)
 // ============================================================================
-function drawBrushstroke(x, y, angle, length, width, color, alpha = 0.8, blendMode = 'normal') {
-  const numBristles = Math.floor(30 + seededRandom() * 20);
+function drawBrushstroke(x, y, angle, length, width, color, alpha = 0.9, blendMode = 'normal') {
+  const numBristles = Math.floor(50 + seededRandom() * 30); // 50-80 (era 30-50)
 
   for (let i = 0; i < numBristles; i++) {
-    const offsetAngle = angle + (seededRandom() - 0.5) * 0.3;
-    const noiseX = noise2D(x * 0.1, i * 0.1) * width * 0.3;
-    const noiseY = noise2D(y * 0.1, i * 0.1) * width * 0.3;
+    const offsetAngle = angle + (seededRandom() - 0.5) * 0.4;
+    const noiseX = noise2D(x * 0.1, i * 0.1) * width * 0.4;
+    const noiseY = noise2D(y * 0.1, i * 0.1) * width * 0.4;
 
     const startX = x + noiseX;
     const startY = y + noiseY;
     const endX = startX + Math.cos(offsetAngle) * length;
     const endY = startY + Math.sin(offsetAngle) * length;
 
-    const pressure = 0.3 + seededRandom() * 0.7;
-    const bristleWidth = width * 0.1 * pressure;
+    const pressure = 0.4 + seededRandom() * 0.8; // Più pressione
+    const bristleWidth = width * 0.15 * pressure; // Più larghe
 
     const path = new paper.Path();
-    path.strokeColor = rgbToColor(varyColor(color, startX, startY, 0.05), alpha);
+    path.strokeColor = rgbToColor(varyColor(color, startX, startY, 0.08), alpha);
     path.strokeWidth = bristleWidth;
     path.strokeCap = 'round';
     path.blendMode = blendMode;
 
-    const midX = (startX + endX) / 2 + (seededRandom() - 0.5) * width * 0.2;
-    const midY = (startY + endY) / 2 + (seededRandom() - 0.5) * width * 0.2;
+    const midX = (startX + endX) / 2 + (seededRandom() - 0.5) * width * 0.3;
+    const midY = (startY + endY) / 2 + (seededRandom() - 0.5) * width * 0.3;
 
     path.add(new paper.Point(startX, startY));
     path.curveTo(
@@ -335,18 +335,18 @@ function drawBrushstroke(x, y, angle, length, width, color, alpha = 0.8, blendMo
   }
 }
 
-function drawImpasto(x, y, radius, color, alpha = 0.9) {
-  const numLayers = 12;
+function drawImpasto(x, y, radius, color, alpha = 0.95) {
+  const numLayers = 18; // Era 12, ora più profondità
 
   for (let layer = 0; layer < numLayers; layer++) {
-    const layerRadius = radius * (1 - layer * 0.05);
-    const layerAlpha = alpha * (0.7 + layer * 0.025);
+    const layerRadius = radius * (1 - layer * 0.04);
+    const layerAlpha = alpha * (0.75 + layer * 0.015);
 
     const points = [];
-    const numPoints = 8;
+    const numPoints = 10; // Era 8
     for (let i = 0; i < numPoints; i++) {
       const angle = (i / numPoints) * Math.PI * 2;
-      const variation = seededRandom() * 0.3 + 0.85;
+      const variation = seededRandom() * 0.4 + 0.8;
       const px = x + Math.cos(angle) * layerRadius * variation;
       const py = y + Math.sin(angle) * layerRadius * variation;
       points.push(new paper.Point(px, py));
@@ -354,21 +354,21 @@ function drawImpasto(x, y, radius, color, alpha = 0.9) {
 
     const polygon = new paper.Path(points);
     polygon.closed = true;
-    polygon.fillColor = rgbToColor(varyColor(color, x, y + layer * 2, 0.08), layerAlpha);
+    polygon.fillColor = rgbToColor(varyColor(color, x, y + layer * 2, 0.12), layerAlpha); // Più variazione
     polygon.blendMode = 'multiply';
   }
 }
 
-function drawWetOnWet(x, y, radius, color1, color2, alpha = 0.7) {
-  const numBlobs = Math.floor(8 + seededRandom() * 4);
+function drawWetOnWet(x, y, radius, color1, color2, alpha = 0.8) {
+  const numBlobs = Math.floor(12 + seededRandom() * 6); // 12-18 (era 8-12)
 
   for (let i = 0; i < numBlobs; i++) {
     const ratio = i / numBlobs;
     const mixedColor = mixColors(color1, color2, ratio);
 
-    const offsetX = x + (seededRandom() - 0.5) * radius;
-    const offsetY = y + (seededRandom() - 0.5) * radius;
-    const blobRadius = radius * (0.3 + seededRandom() * 0.4);
+    const offsetX = x + (seededRandom() - 0.5) * radius * 1.2;
+    const offsetY = y + (seededRandom() - 0.5) * radius * 1.2;
+    const blobRadius = radius * (0.4 + seededRandom() * 0.5); // Più grandi
 
     const circle = new paper.Path.Circle({
       center: [offsetX, offsetY],
@@ -503,13 +503,13 @@ function renderNote(note, noteIndex, growthFactor = 1.0) {
   // Base color from Zorn palette
   const baseColor = getPaletteColor(note.pitch);
 
-  // Base size from velocity
-  let baseSize = 20 + (note.velocity_value || 0.5) * 60;
+  // Base size from velocity - AUMENTATO +30%
+  let baseSize = 30 + (note.velocity_value || 0.5) * 80; // Era 20 + 60
 
   // ENFASI DINAMICA - Climax detection
   const climaxDistance = Math.abs(noteIndex - dynamicsAnalysis.climax_idx) / notes.length;
   const climaxFactor = 1.0 - climaxDistance;
-  baseSize *= (1.0 + climaxFactor * 0.5); // +50% at climax
+  baseSize *= (1.0 + climaxFactor * 0.7); // +70% at climax (era +50%)
 
   // Apply growth factor
   const size = baseSize * growthFactor;
@@ -629,6 +629,12 @@ function playAnimation() {
   console.log('   Audio current time:', audio.currentTime);
 
   audio.currentTime = currentFrame / fps;
+
+  // Stop animation when audio ends
+  audio.onended = () => {
+    console.log('🎵 Audio ended, stopping animation');
+    pauseAnimation();
+  };
 
   const playPromise = audio.play();
   if (playPromise !== undefined) {
