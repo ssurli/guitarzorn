@@ -266,7 +266,7 @@ function varyColor(color, x, y, intensity = 0.1) {
 // ============================================================================
 function applyCanvasTexture() {
   const canvas = document.getElementById('paperCanvas');
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
   // Fill with base color
   ctx.fillStyle = `rgb(${CANVAS_BASE[0]}, ${CANVAS_BASE[1]}, ${CANVAS_BASE[2]})`;
@@ -622,11 +622,25 @@ function playAnimation() {
 
   // Start audio playback
   const audio = document.getElementById('audioPlayer');
+
+  console.log('🔊 Attempting to play audio...');
+  console.log('   Audio element:', audio);
+  console.log('   Audio ready state:', audio.readyState);
+  console.log('   Audio current time:', audio.currentTime);
+
   audio.currentTime = currentFrame / fps;
-  audio.play().catch(err => {
-    console.warn('Audio playback failed:', err);
-    // Continue animation even if audio fails
-  });
+
+  const playPromise = audio.play();
+  if (playPromise !== undefined) {
+    playPromise
+      .then(() => {
+        console.log('✅ Audio playing successfully!');
+      })
+      .catch(err => {
+        console.error('❌ Audio playback failed:', err.name, err.message);
+        alert('Audio bloccato dal browser! Clicca OK e premi Play di nuovo.');
+      });
+  }
 
   fps = parseInt(document.getElementById('fpsSelect').value);
   const lastNote = notes[notes.length - 1];
