@@ -496,20 +496,27 @@ function drawCraquelure(x, y, radius, alpha = 0.4) {
 function renderNote(note, noteIndex, growthFactor = 1.0) {
   const canvas = document.getElementById('paperCanvas');
 
-  // Map pitch to Y, time to X
-  const x = 100 + (note.start_time / 20) * (canvas.width - 200);
-  const y = canvas.height / 2 + (60 - note.pitch) * 8;
+  // Calculate total duration dynamically
+  const lastNote = notes[notes.length - 1];
+  const totalDuration = lastNote.start_time + lastNote.duration;
+
+  // Map time to X (full canvas width)
+  const x = 50 + (note.start_time / totalDuration) * (canvas.width - 100);
+
+  // Map pitch to Y (full canvas height) - increased scale
+  const pitchRange = 48; // 4 octaves
+  const y = canvas.height / 2 + (60 - note.pitch) * 20; // 20px per semitone (era 8)
 
   // Base color from Zorn palette
   const baseColor = getPaletteColor(note.pitch);
 
-  // Base size from velocity - AUMENTATO +30%
-  let baseSize = 30 + (note.velocity_value || 0.5) * 80; // Era 20 + 60
+  // Base size from velocity - MOLTO PIÙ GRANDE
+  let baseSize = 80 + (note.velocity_value || 0.5) * 150; // Era 30 + 80
 
   // ENFASI DINAMICA - Climax detection
   const climaxDistance = Math.abs(noteIndex - dynamicsAnalysis.climax_idx) / notes.length;
   const climaxFactor = 1.0 - climaxDistance;
-  baseSize *= (1.0 + climaxFactor * 0.7); // +70% at climax (era +50%)
+  baseSize *= (1.0 + climaxFactor * 0.7); // +70% at climax
 
   // Apply growth factor
   const size = baseSize * growthFactor;
