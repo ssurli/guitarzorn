@@ -32,14 +32,15 @@ env/
 *.swo
 *~
 
-# OS
-.DS_Store
-Thumbs.db
-
 # Node.js
 node_modules/
 npm-debug.log
 package-lock.json
 
-# Generated frames
+# Frames output
 frames/
+
+# OS
+.DS_Store
+Thumbs.db
+.env
