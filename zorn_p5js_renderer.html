@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Zorn Pentatonic Renderer - p5.js Oil Painting Version</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: 'Monaco', 'Courier New', monospace;
+      background: #1a1a1a;
+      color: #f0f0f0;
+    }
+    h1 {
+      text-align: center;
+      color: #ff6b35;
+    }
+    .controls {
+      text-align: center;
+      margin: 20px;
+      padding: 20px;
+      background: #2a2a2a;
+      border-radius: 8px;
+    }
+    button {
+      padding: 12px 24px;
+      font-size: 16px;
+      margin: 5px;
+      cursor: pointer;
+      background: #ff6b35;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-family: inherit;
+    }
+    button:hover {
+      background: #ff8555;
+    }
+    #canvasContainer {
+      text-align: center;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎨 Zorn Pentatonic Oil Painting Renderer - p5.js Version</h1>
+
+  <div class="controls">
+    <button onclick="loadNotesAndPaint()">Load Notes & Paint</button>
+    <button onclick="clearPainting()">Clear Canvas</button>
+    <br><br>
+    <span>Brush Size: <span id="brushSizeDisplay">12</span></span>
+  </div>
+
+  <div id="canvasContainer"></div>
+
+  <script>
+    // Global variables
+    let notes = [];
+    let canvas;
+    let painting = false;
+    let currentNoteIndex = 0;
+    let brushSize = 12;
+
+    // Zorn Palette
+    const ZORN_PALETTE = {
+      YELLOW_OCHRE: [227, 168, 87],
+      VERMILION: [217, 96, 59],
+      IVORY_BLACK: [41, 36, 33],
+      TITANIUM_WHITE: [252, 250, 242]
+    };
+
+    const CANVAS_BASE = [242, 235, 220];
+
+    // p5.js sketch
+    const sketch = function(p) {
+
+      p.setup = function() {
+        // Create canvas
+        const cnv = p.createCanvas(1200, 600);
+        cnv.parent('canvasContainer');
+
+        // Setup
+        p.background(CANVAS_BASE);
+        p.strokeCap(p.SQUARE);
+        p.colorMode(p.RGB, 255);
+
+        console.log('✅ p5.js canvas ready');
+      };
+
+      p.draw = function() {
+        // Auto-paint notes one by one when painting
+        if (painting && currentNoteIndex < notes.length) {
+          const note = notes[currentNoteIndex];
+          paintNote(note, currentNoteIndex);
+          currentNoteIndex++;
+
+          if (currentNoteIndex >= notes.length) {
+            painting = false;
+            console.log('✅ Painting complete!');
+          }
+        }
+      };
+
+      //
+      // Paint a single note with oil brush technique
+      //
+      function paintNote(note, index) {
+        // Map note position to canvas
+        const totalDuration = notes[notes.length - 1].start_time + notes[notes.length - 1].duration;
+        const x = 50 + (note.start_time / totalDuration) * (p.width - 100);
+        const y = p.height / 2 + (60 - note.pitch) * 10;
+
+        // Get color from pitch
+        const color = getPaletteColor(note.pitch);
+
+        // Size based on velocity and dynamics
+        let size = 30 + (note.velocity_value || 0.5) * 60;
+
+        // Technique-based rendering
+        const technique = note.technique || 'regular';
+
+        switch(technique) {
+          case 'vibrato':
+            drawVibratoStroke(x, y, size, color);
+            break;
+          case 'bend':
+            drawBendStroke(x, y, size, color);
+            break;
+          case 'slide':
+            drawSlideStroke(x, y, size, color);
+            break;
+          case 'staccato':
+            drawStaccatoStroke(x, y, size, color);
+            break;
+          case 'legato':
+            drawLegatoStroke(x, y, size, color);
+            break;
+          default:
+            drawOilBrushStroke(x, y, size, color);
+        }
+      }
+
+      //
+      // Oil brush stroke using p5.js bristle simulation
+      //
+      function drawOilBrushStroke(x, y, size, baseColor) {
+        const nBristles = Math.round(size * 0.8);
+        const angle = p.random(p.TWO_PI);
+        const length = size * (0.8 + p.random(0.4));
+
+        // Create bristles
+        for (let i = 0; i < nBristles; i++) {
+          // Spread bristles perpendicular to stroke
+          const spread = (i / nBristles - 0.5) * size * 0.6;
+          const perpAngle = angle + p.HALF_PI;
+
+          const startX = x + p.cos(perpAngle) * spread;
+          const startY = y + p.sin(perpAngle) * spread;
+
+          // Bristle path with organic variation
+          const bristleAngle = angle + p.random(-0.3, 0.3);
+          const bristleLength = length * (0.7 + p.random(0.6));
+
+          // Color variation per bristle
+          const deltaBrightness = p.random(-20, 20);
+          const bristleColor = p.color(
+            p.constrain(baseColor[0] + deltaBrightness, 0, 255),
+            p.constrain(baseColor[1] + deltaBrightness, 0, 255),
+            p.constrain(baseColor[2] + deltaBrightness, 0, 255),
+            p.random(100, 200)
+          );
+
+          // Draw bristle with chain segments (simulating physics)
+          drawBristleChain(startX, startY, bristleAngle, bristleLength, bristleColor);
+        }
+      }
+
+      //
+      // Draw a single bristle as a chain of segments
+      //
+      function drawBristleChain(x, y, angle, length, col) {
+        const nSegments = 5;
+        const segmentLength = length / nSegments;
+
+        p.stroke(col);
+        p.noFill();
+
+        let currentX = x;
+        let currentY = y;
+        let currentAngle = angle;
+
+        for (let i = 0; i < nSegments; i++) {
+          // Add organic variation to angle
+          currentAngle += p.random(-0.2, 0.2);
+
+          const nextX = currentX + p.cos(currentAngle) * segmentLength;
+          const nextY = currentY + p.sin(currentAngle) * segmentLength;
+
+          // Thickness decreases along bristle
+          const thickness = (3 + p.random(2)) * (1 - i / nSegments * 0.5);
+          p.strokeWeight(thickness);
+
+          p.line(currentX, currentY, nextX, nextY);
+
+          currentX = nextX;
+          currentY = nextY;
+        }
+      }
+
+      //
+      // Vibrato technique
+      //
+      function drawVibratoStroke(x, y, size, color) {
+        const numWaves = 4;
+        const amplitude = size * 0.4;
+
+        p.stroke(color[0], color[1], color[2], 180);
+        p.strokeWeight(size * 0.15);
+        p.noFill();
+
+        p.beginShape();
+        for (let i = 0; i <= numWaves * 8; i++) {
+          const t = i / (numWaves * 8);
+          const px = x - size + t * size * 2;
+          const py = y + p.sin(i * p.PI / 4) * amplitude;
+          p.vertex(px, py);
+        }
+        p.endShape();
+
+        // Add impasto at center
+        drawImpasto(x, y, size * 0.4, color);
+      }
+
+      //
+      // Bend technique
+      //
+      function drawBendStroke(x, y, size, color) {
+        const startY = y + size * 0.5;
+        const endY = y - size * 0.5;
+        const controlX = x + size * 0.6;
+
+        p.stroke(color[0], color[1], color[2], 200);
+        p.strokeWeight(size * 0.12);
+        p.noFill();
+
+        p.bezier(
+          x, startY,
+          controlX, (startY + endY) / 2,
+          controlX, (startY + endY) / 2,
+          x, endY
+        );
+
+        // Arrow
+        const arrowSize = size * 0.15;
+        p.line(x - arrowSize, endY + arrowSize, x, endY);
+        p.line(x + arrowSize, endY + arrowSize, x, endY);
+      }
+
+      //
+      // Slide technique
+      //
+      function drawSlideStroke(x, y, size, color) {
+        const angle = p.random() > 0.5 ? -p.PI / 4 : p.PI / 4;
+        const length = size * 1.5;
+
+        const startX = x - p.cos(angle) * length / 2;
+        const startY = y - p.sin(angle) * length / 2;
+        const endX = x + p.cos(angle) * length / 2;
+        const endY = y + p.sin(angle) * length / 2;
+
+        p.stroke(color[0], color[1], color[2], 180);
+        p.strokeWeight(size * 0.15);
+        p.line(startX, startY, endX, endY);
+
+        // Motion trails
+        for (let i = 0; i < 3; i++) {
+          const offset = (i - 1) * size * 0.25;
+          p.stroke(color[0], color[1], color[2], 60 - i * 20);
+          p.strokeWeight(size * 0.08);
+          p.line(startX + offset, startY, endX + offset, endY);
+        }
+      }
+
+      //
+      // Staccato technique
+      //
+      function drawStaccatoStroke(x, y, size, color) {
+        const numDots = 3 + Math.floor(p.random(3));
+
+        p.fill(color[0], color[1], color[2], 220);
+        p.noStroke();
+
+        for (let i = 0; i < numDots; i++) {
+          const angle = (i / numDots) * p.TWO_PI;
+          const distance = size * 0.4;
+          const dotX = x + p.cos(angle) * distance;
+          const dotY = y + p.sin(angle) * distance;
+          const dotRadius = size * 0.15;
+
+          p.ellipse(dotX, dotY, dotRadius * 2);
+        }
+
+        // Center dot
+        p.ellipse(x, y, size * 0.4);
+      }
+
+      //
+      // Legato technique
+      //
+      function drawLegatoStroke(x, y, size, color) {
+        const length = size * 1.8;
+        const width = size * 0.6;
+
+        p.noStroke();
+
+        for (let i = 0; i < 15; i++) {
+          const offset = (i / 15 - 0.5) * length;
+          const localWidth = width * (1 - Math.abs(offset / length) * 0.5);
+          const alpha = 40 - i * 2;
+
+          p.fill(color[0], color[1], color[2], alpha);
+          p.ellipse(x + offset, y, localWidth * 2);
+        }
+      }
+
+      //
+      // Impasto technique
+      //
+      function drawImpasto(x, y, radius, color) {
+        const numLayers = 12;
+
+        for (let layer = 0; layer < numLayers; layer++) {
+          const layerRadius = radius * (1 - layer * 0.05);
+          const alpha = 200 * (0.7 + layer * 0.025);
+
+          p.fill(color[0], color[1], color[2], alpha);
+          p.noStroke();
+
+          // Irregular shape
+          p.beginShape();
+          const numPoints = 8;
+          for (let i = 0; i < numPoints; i++) {
+            const angle = (i / numPoints) * p.TWO_PI;
+            const variation = 0.8 + p.random(0.4);
+            const px = x + p.cos(angle) * layerRadius * variation;
+            const py = y + p.sin(angle) * layerRadius * variation;
+            p.vertex(px, py);
+          }
+          p.endShape(p.CLOSE);
+        }
+      }
+
+      //
+      // Get palette color from pitch
+      //
+      function getPaletteColor(pitch) {
+        const normalized = (pitch % 12) / 12;
+
+        if (normalized < 0.25) return ZORN_PALETTE.YELLOW_OCHRE;
+        else if (normalized < 0.5) return ZORN_PALETTE.VERMILION;
+        else if (normalized < 0.75) return ZORN_PALETTE.IVORY_BLACK;
+        else return ZORN_PALETTE.TITANIUM_WHITE;
+      }
+    };
+
+    // Create p5.js instance
+    const myp5 = new p5(sketch);
+
+    //
+    // Load notes and start painting
+    //
+    async function loadNotesAndPaint() {
+      try {
+        const response = await fetch('1207(1)_notes.json');
+        notes = await response.json();
+        console.log(`✅ Loaded ${notes.length} notes`);
+
+        // Reset
+        currentNoteIndex = 0;
+        myp5.background(CANVAS_BASE);
+
+        // Start painting
+        painting = true;
+        console.log('🎨 Starting oil painting...');
+      } catch (error) {
+        console.error('❌ Error loading notes:', error);
+        alert('Errore nel caricamento note! Verifica che 1207(1)_notes.json esista.');
+      }
+    }
+
+    //
+    // Clear painting
+    //
+    function clearPainting() {
+      myp5.background(CANVAS_BASE);
+      painting = false;
+      currentNoteIndex = 0;
+      console.log('🧹 Canvas cleared');
+    }
+  </script>
+</body>
+</html>
