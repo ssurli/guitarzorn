@@ -491,6 +491,158 @@ function drawCraquelure(x, y, radius, alpha = 0.4) {
 }
 
 // ============================================================================
+// GUITAR TECHNIQUE VISUAL NOTATION (based on graphic algorithm)
+// ============================================================================
+
+/**
+ * LEGATO - Blob sfumato/elongato
+ */
+function drawLegato(x, y, size, color, direction = 'horizontal') {
+  const angle = direction === 'horizontal' ? 0 : Math.PI / 2;
+  const length = size * 1.8;
+  const width = size * 0.6;
+
+  // Create elongated blob with soft edges
+  for (let i = 0; i < 15; i++) {
+    const offset = (i / 15 - 0.5) * length;
+    const localWidth = width * (1 - Math.abs(offset / length) * 0.5);
+
+    const circle = new paper.Path.Circle({
+      center: [x + Math.cos(angle) * offset, y + Math.sin(angle) * offset],
+      radius: localWidth,
+      fillColor: rgbToColor(color, 0.15 - i * 0.008),
+      blendMode: 'multiply'
+    });
+  }
+}
+
+/**
+ * STACCATO - Punti/dots multipli
+ */
+function drawStaccato(x, y, size, color) {
+  const numDots = 3 + Math.floor(seededRandom() * 3); // 3-5 dots
+
+  for (let i = 0; i < numDots; i++) {
+    const angle = (i / numDots) * Math.PI * 2;
+    const distance = size * 0.4;
+    const dotX = x + Math.cos(angle) * distance;
+    const dotY = y + Math.sin(angle) * distance;
+    const dotRadius = size * 0.15;
+
+    const dot = new paper.Path.Circle({
+      center: [dotX, dotY],
+      radius: dotRadius,
+      fillColor: rgbToColor(color, 0.9),
+      blendMode: 'normal'
+    });
+  }
+
+  // Center dot
+  const centerDot = new paper.Path.Circle({
+    center: [x, y],
+    radius: size * 0.2,
+    fillColor: rgbToColor(color, 1.0),
+    blendMode: 'normal'
+  });
+}
+
+/**
+ * BEND - Curva rossa/colorata
+ */
+function drawBendTechnique(x, y, size, color) {
+  const startY = y + size * 0.5;
+  const endY = y - size * 0.5;
+  const controlX = x + size * 0.6;
+
+  const path = new paper.Path();
+  path.strokeColor = rgbToColor(color, 0.9);
+  path.strokeWidth = size * 0.12;
+  path.strokeCap = 'round';
+
+  path.add(new paper.Point(x, startY));
+  path.curveTo(
+    new paper.Point(controlX, (startY + endY) / 2),
+    new paper.Point(x, endY)
+  );
+
+  // Add arrow at top
+  const arrowSize = size * 0.15;
+  const arrow = new paper.Path([
+    new paper.Point(x - arrowSize, endY + arrowSize),
+    new paper.Point(x, endY),
+    new paper.Point(x + arrowSize, endY + arrowSize)
+  ]);
+  arrow.strokeColor = rgbToColor(color, 0.9);
+  arrow.strokeWidth = size * 0.08;
+  arrow.strokeCap = 'round';
+}
+
+/**
+ * SLIDE - Linea diagonale
+ */
+function drawSlideTechnique(x, y, size, color, direction = 'up') {
+  const angle = direction === 'up' ? -Math.PI / 4 : Math.PI / 4;
+  const length = size * 1.5;
+
+  const startX = x - Math.cos(angle) * length / 2;
+  const startY = y - Math.sin(angle) * length / 2;
+  const endX = x + Math.cos(angle) * length / 2;
+  const endY = y + Math.sin(angle) * length / 2;
+
+  const path = new paper.Path.Line(
+    new paper.Point(startX, startY),
+    new paper.Point(endX, endY)
+  );
+  path.strokeColor = rgbToColor(color, 0.85);
+  path.strokeWidth = size * 0.15;
+  path.strokeCap = 'round';
+
+  // Add motion lines
+  for (let i = 0; i < 3; i++) {
+    const offset = (i - 1) * size * 0.3;
+    const motionPath = new paper.Path.Line(
+      new paper.Point(startX + offset, startY),
+      new paper.Point(endX + offset, endY)
+    );
+    motionPath.strokeColor = rgbToColor(color, 0.3 - i * 0.1);
+    motionPath.strokeWidth = size * 0.08;
+    motionPath.strokeCap = 'round';
+  }
+}
+
+/**
+ * VIBRATO - Forma ondulata
+ */
+function drawVibratoTechnique(x, y, size, color) {
+  const numWaves = 4;
+  const amplitude = size * 0.3;
+
+  const path = new paper.Path();
+  path.strokeColor = rgbToColor(color, 0.85);
+  path.strokeWidth = size * 0.12;
+  path.strokeCap = 'round';
+
+  for (let i = 0; i <= numWaves * 2; i++) {
+    const t = i / (numWaves * 2);
+    const px = x - size + t * size * 2;
+    const py = y + Math.sin(i * Math.PI) * amplitude;
+
+    if (i === 0) {
+      path.add(new paper.Point(px, py));
+    } else {
+      path.lineTo(new paper.Point(px, py));
+    }
+  }
+
+  // Add subtle fill
+  const fillPath = path.clone();
+  fillPath.closePath();
+  fillPath.fillColor = rgbToColor(color, 0.2);
+  fillPath.strokeColor = null;
+  fillPath.blendMode = 'multiply';
+}
+
+// ============================================================================
 // NOTE RENDERING
 // ============================================================================
 function renderNote(note, noteIndex, growthFactor = 1.0) {
@@ -530,16 +682,46 @@ function renderNote(note, noteIndex, growthFactor = 1.0) {
     intervalInfo = analyzeInterval(notes[noteIndex - 1], note);
   }
 
-  // TECHNIQUE SELECTION
+  // GUITAR TECHNIQUE-BASED VISUAL NOTATION
+  const technique = note.technique || 'regular';
 
-  // Base impasto
-  drawImpasto(x, y, size * 0.6, baseColor, 0.8);
+  // Primary shape based on guitar technique
+  switch(technique) {
+    case 'legato':
+      drawLegato(x, y, size, baseColor, contour === 'ascending' ? 'horizontal' : 'horizontal');
+      break;
 
-  // GLAZING: Small intervals
-  if (intervalInfo && ['unison', 'step'].includes(intervalInfo.type)) {
-    if (seededRandom() < 0.6 * growthFactor) {
-      drawGlazing(x, y, size * 0.8, baseColor, 0.3);
-    }
+    case 'staccato':
+      drawStaccato(x, y, size, baseColor);
+      break;
+
+    case 'bend':
+      drawBendTechnique(x, y, size, baseColor);
+      drawImpasto(x, y, size * 0.5, baseColor, 0.7); // Base form
+      break;
+
+    case 'slide':
+      const slideDir = contour === 'ascending' ? 'up' : 'down';
+      drawSlideTechnique(x, y, size, baseColor, slideDir);
+      break;
+
+    case 'vibrato':
+      drawVibratoTechnique(x, y, size, baseColor);
+      drawImpasto(x, y, size * 0.5, baseColor, 0.7); // Base form
+      break;
+
+    case 'regular':
+    default:
+      // Regular technique - use full painterly rendering
+      drawImpasto(x, y, size * 0.6, baseColor, 0.8);
+
+      // GLAZING: Small intervals
+      if (intervalInfo && ['unison', 'step'].includes(intervalInfo.type)) {
+        if (seededRandom() < 0.6 * growthFactor) {
+          drawGlazing(x, y, size * 0.8, baseColor, 0.3);
+        }
+      }
+      break;
   }
 
   // WET-ON-WET: Small intervals
