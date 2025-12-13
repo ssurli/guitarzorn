@@ -491,6 +491,241 @@ function drawCraquelure(x, y, radius, alpha = 0.4) {
 }
 
 // ============================================================================
+// OIL PAINTING SIMULATION - Bristle-based brush (inspired by Javier Gracia Carpio)
+// ============================================================================
+
+/**
+ * Bristle - Simulates a single brush hair with chain physics
+ */
+class Bristle {
+  constructor(nElements, thickness) {
+    this.nPositions = nElements + 1;
+    this.positions = [];
+    this.lengths = [];
+    this.thicknesses = [];
+
+    const thicknessDecrement = thickness / nElements;
+
+    for (let i = 0; i < this.nPositions; i++) {
+      this.positions[i] = { x: 0, y: 0 };
+      this.lengths[i] = this.nPositions - i;
+      this.thicknesses[i] = thickness - (i - 1) * thicknessDecrement;
+    }
+  }
+
+  setPosition(newPosition) {
+    for (let i = 0; i < this.nPositions; i++) {
+      this.positions[i].x = newPosition.x;
+      this.positions[i].y = newPosition.y;
+    }
+  }
+
+  updatePosition(newPosition) {
+    const previousPos = this.positions[0];
+    previousPos.x = newPosition.x;
+    previousPos.y = newPosition.y;
+
+    for (let i = 1; i < this.nPositions; i++) {
+      const pos = this.positions[i];
+      const length = this.lengths[i];
+      const ang = Math.atan2(previousPos.y - pos.y, previousPos.x - pos.x);
+      pos.x = previousPos.x - length * Math.cos(ang);
+      pos.y = previousPos.y - length * Math.sin(ang);
+      this.positions[i - 1] = previousPos;
+    }
+  }
+
+  paintOnScreen(color) {
+    let previousPos = this.positions[0];
+
+    for (let i = 1; i < this.nPositions; i++) {
+      const pos = this.positions[i];
+      const path = new paper.Path.Line(
+        new paper.Point(previousPos.x, previousPos.y),
+        new paper.Point(pos.x, pos.y)
+      );
+      path.strokeColor = color;
+      path.strokeWidth = this.thicknesses[i];
+      path.strokeCap = 'round';
+      previousPos = pos;
+    }
+  }
+}
+
+/**
+ * OilBrush - Simulates an oil painting brush with multiple bristles
+ */
+class OilBrush {
+  constructor(size) {
+    this.maxBristleLength = 15;
+    this.maxBristleThickness = 5;
+    this.positionsForAverage = 4;
+    this.bristleVerticalNoise = 8;
+    this.maxBristleHorizontalNoise = 4;
+    this.noiseSpeedFactor = 0.04;
+
+    this.position = { x: 0, y: 0 };
+    this.nBristles = Math.round(size * (1.6 + seededRandom() * 0.3));
+    this.bristles = [];
+    this.bOffsets = [];
+    this.bPositions = [];
+    this.positionsHistory = [];
+    this.averagePosition = { x: 0, y: 0 };
+    this.noiseSeed = seededRandom() * 1000;
+    this.updatesCounter = 0;
+    this.bristleHorizontalNoise = Math.min(0.3 * size, this.maxBristleHorizontalNoise);
+
+    const bristleLength = Math.min(size, this.maxBristleLength);
+    const nElements = Math.round(Math.sqrt(2 * bristleLength));
+    const bristleThickness = Math.min(0.8 * bristleLength, this.maxBristleThickness);
+
+    for (let bristle = 0; bristle < this.nBristles; bristle++) {
+      this.bristles[bristle] = new Bristle(nElements, bristleThickness);
+      this.bOffsets[bristle] = {
+        x: size * (seededRandom() - 0.5),
+        y: this.bristleVerticalNoise * (seededRandom() - 0.5)
+      };
+      this.bPositions[bristle] = { x: 0, y: 0 };
+    }
+  }
+
+  init(newPosition) {
+    this.position.x = newPosition.x;
+    this.position.y = newPosition.y;
+    this.positionsHistory = [];
+    this.averagePosition.x = this.position.x;
+    this.averagePosition.y = this.position.y;
+    this.updatesCounter = 0;
+  }
+
+  update(newPosition, updateBristleElements) {
+    this.position.x = newPosition.x;
+    this.position.y = newPosition.y;
+
+    const historySize = this.positionsHistory.length;
+
+    if (historySize < this.positionsForAverage) {
+      this.positionsHistory[historySize] = { x: newPosition.x, y: newPosition.y };
+    } else {
+      const pos = this.positionsHistory[this.updatesCounter % this.positionsForAverage];
+      pos.x = newPosition.x;
+      pos.y = newPosition.y;
+    }
+
+    const currentHistorySize = Math.min(historySize + 1, this.positionsForAverage);
+    let xNewAverage = 0;
+    let yNewAverage = 0;
+
+    for (let i = 0; i < currentHistorySize; i++) {
+      const pos = this.positionsHistory[i];
+      xNewAverage += pos.x;
+      yNewAverage += pos.y;
+    }
+
+    xNewAverage /= currentHistorySize;
+    yNewAverage /= currentHistorySize;
+
+    const directionAngle = Math.PI / 2 + Math.atan2(
+      yNewAverage - this.averagePosition.y,
+      xNewAverage - this.averagePosition.x
+    );
+
+    this.averagePosition.x = xNewAverage;
+    this.averagePosition.y = yNewAverage;
+
+    this.updateBristlePositions(directionAngle);
+
+    if (updateBristleElements) {
+      if (currentHistorySize === this.positionsForAverage) {
+        for (let bristle = 0; bristle < this.nBristles; bristle++) {
+          this.bristles[bristle].updatePosition(this.bPositions[bristle]);
+        }
+      } else if (currentHistorySize === this.positionsForAverage - 1) {
+        for (let bristle = 0; bristle < this.nBristles; bristle++) {
+          this.bristles[bristle].setPosition(this.bPositions[bristle]);
+        }
+      }
+    }
+
+    this.updatesCounter++;
+  }
+
+  updateBristlePositions(directionAngle) {
+    if (this.positionsHistory.length >= this.positionsForAverage - 1) {
+      const cos = Math.cos(directionAngle);
+      const sin = Math.sin(directionAngle);
+      const noisePos = this.noiseSeed + this.noiseSpeedFactor * this.updatesCounter;
+
+      for (let bristle = 0; bristle < this.nBristles; bristle++) {
+        const offset = this.bOffsets[bristle];
+        const x = offset.x + this.bristleHorizontalNoise * (noise2D(noisePos + 0.1 * bristle, 0) - 0.5);
+        const y = offset.y;
+
+        const pos = this.bPositions[bristle];
+        pos.x = this.position.x + (x * cos - y * sin);
+        pos.y = this.position.y + (x * sin + y * cos);
+      }
+    }
+  }
+
+  paintOnScreen(colors) {
+    if (this.positionsHistory.length === this.positionsForAverage) {
+      for (let bristle = 0; bristle < this.nBristles; bristle++) {
+        this.bristles[bristle].paintOnScreen(colors[bristle]);
+      }
+    }
+  }
+
+  getNBristles() {
+    return this.nBristles;
+  }
+
+  getBristlesPositions() {
+    if (this.positionsHistory.length === this.positionsForAverage) {
+      return this.bPositions;
+    }
+    return undefined;
+  }
+}
+
+/**
+ * Enhanced oil painting brushstroke using bristle simulation
+ */
+function drawOilBrushstroke(x, y, angle, length, width, color, alpha = 0.9) {
+  const brush = new OilBrush(width);
+  const nSteps = Math.ceil(length / 2);
+  const speed = length / nSteps;
+
+  // Initialize brush at starting position
+  brush.init({ x, y });
+
+  // Generate bristle colors with variation
+  const noiseSeed = seededRandom() * 1000;
+  const bristleColors = [];
+
+  for (let bristle = 0; bristle < brush.getNBristles(); bristle++) {
+    const deltaColor = 12 * (noise2D(noiseSeed + 0.4 * bristle, 0) - 0.5);
+    const variedColor = [
+      Math.max(0, Math.min(255, color[0] + deltaColor)),
+      Math.max(0, Math.min(255, color[1] + deltaColor)),
+      Math.max(0, Math.min(255, color[2] + deltaColor))
+    ];
+    bristleColors[bristle] = rgbToColor(variedColor, alpha);
+  }
+
+  // Paint the stroke step by step
+  for (let step = 0; step < nSteps; step++) {
+    const t = step / nSteps;
+    const offsetAngle = angle + (seededRandom() - 0.5) * 0.3;
+    const currentX = x + Math.cos(offsetAngle) * length * t;
+    const currentY = y + Math.sin(offsetAngle) * length * t;
+
+    brush.update({ x: currentX, y: currentY }, true);
+    brush.paintOnScreen(bristleColors);
+  }
+}
+
+// ============================================================================
 // GUITAR TECHNIQUE VISUAL NOTATION (based on graphic algorithm)
 // ============================================================================
 
@@ -724,10 +959,19 @@ function renderNote(note, noteIndex, growthFactor = 1.0) {
       break;
   }
 
-  // WET-ON-WET: Small intervals
+  // WET-ON-WET: Small intervals with color mixing from adjacent notes
   if (intervalInfo && ['unison', 'step', 'small'].includes(intervalInfo.type)) {
     if (seededRandom() < 0.5 * growthFactor) {
-      const secondaryColor = getPaletteColor(note.pitch + 3);
+      // Mix with previous note's color for realistic wet-on-wet
+      let secondaryColor;
+      if (noteIndex > 0) {
+        const prevNote = notes[noteIndex - 1];
+        const prevColor = getPaletteColor(prevNote.pitch);
+        // Blend 30% previous note color with 70% new color
+        secondaryColor = mixColors(prevColor, baseColor, 0.3);
+      } else {
+        secondaryColor = getPaletteColor(note.pitch + 3);
+      }
       drawWetOnWet(x, y, size * 0.7, baseColor, secondaryColor, 0.6);
     }
   }
@@ -741,10 +985,10 @@ function renderNote(note, noteIndex, growthFactor = 1.0) {
     }
   }
 
-  // BRUSHSTROKE: Directional
+  // OIL BRUSHSTROKE: Directional with bristle simulation
   const strokeAngle = contour === 'ascending' ? -Math.PI / 3 :
                      contour === 'descending' ? Math.PI / 3 : 0;
-  drawBrushstroke(x, y, strokeAngle, size * 1.5, size * 0.3, baseColor, 0.7, 'multiply');
+  drawOilBrushstroke(x, y, strokeAngle, size * 1.5, size * 0.3, baseColor, 0.7);
 
   // DRIPPING: Descending
   if (contour === 'descending') {
