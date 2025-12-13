@@ -35,3 +35,11 @@ env/
 # OS
 .DS_Store
 Thumbs.db
+
+# Node.js
+node_modules/
+npm-debug.log
+package-lock.json
+
+# Generated frames
+frames/

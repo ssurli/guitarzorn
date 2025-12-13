@@ -1,0 +1,18 @@
+{
+  "name": "zorn-pentatonic-paperjs",
+  "version": "1.0.0",
+  "description": "Zorn Pentatonic Painterly Renderer with Paper.js",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "serve": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "",
+  "license": "ISC"
+}

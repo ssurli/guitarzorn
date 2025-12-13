@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Oil Brush Test - Simplified</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paper.js/0.12.17/paper-full.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: monospace;
+      background: #f0f0f0;
+    }
+    #testCanvas {
+      border: 2px solid #333;
+      background: rgb(242, 235, 220);
+      display: block;
+      margin: 20px auto;
+    }
+    .controls {
+      text-align: center;
+      margin: 20px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      margin: 5px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1 style="text-align: center;">Oil Brush Test - Simplified Bristle Simulation</h1>
+
+  <canvas id="testCanvas" width="800" height="600"></canvas>
+
+  <div class="controls">
+    <button onclick="testSimpleBrushstroke()">Test Simple Brushstroke</button>
+    <button onclick="testMultipleBristles()">Test Multiple Bristles</button>
+    <button onclick="clearCanvas()">Clear Canvas</button>
+  </div>
+
+  <script type="text/javascript">
+    paper.setup('testCanvas');
+
+    // Simple seeded random
+    let rngState = 42;
+    function seededRandom() {
+      rngState = (rngState * 1664525 + 1013904223) % 4294967296;
+      return rngState / 4294967296;
+    }
+
+    // SIMPLIFIED Bristle - just draws a simple stroke with variation
+    function drawSimpleBristle(x1, y1, x2, y2, thickness, color) {
+      const path = new paper.Path();
+      path.strokeColor = color;
+      path.strokeWidth = thickness;
+      path.strokeCap = 'round';
+
+      // Add some organic curve
+      const midX = (x1 + x2) / 2 + (seededRandom() - 0.5) * 10;
+      const midY = (y1 + y2) / 2 + (seededRandom() - 0.5) * 10;
+
+      path.add(new paper.Point(x1, y1));
+      path.curveTo(
+        new paper.Point(midX, midY),
+        new paper.Point(x2, y2)
+      );
+    }
+
+    // SIMPLIFIED Brush - collection of bristles
+    function drawSimpleBrush(x, y, angle, length, width, color) {
+      const numBristles = Math.round(width * 2); // 2 bristles per pixel width
+
+      for (let i = 0; i < numBristles; i++) {
+        // Spread bristles perpendicular to stroke direction
+        const spread = (i / numBristles - 0.5) * width;
+        const perpAngle = angle + Math.PI / 2;
+
+        const startX = x + Math.cos(perpAngle) * spread;
+        const startY = y + Math.sin(perpAngle) * spread;
+        const endX = startX + Math.cos(angle) * length;
+        const endY = startY + Math.sin(angle) * length;
+
+        // Vary thickness and color per bristle
+        const thickness = (width * 0.1) * (0.5 + seededRandom() * 0.5);
+        const alpha = 0.3 + seededRandom() * 0.4;
+        const bristleColor = new paper.Color(
+          color.red + (seededRandom() - 0.5) * 0.1,
+          color.green + (seededRandom() - 0.5) * 0.1,
+          color.blue + (seededRandom() - 0.5) * 0.1,
+          alpha
+        );
+
+        drawSimpleBristle(startX, startY, endX, endY, thickness, bristleColor);
+      }
+    }
+
+    // Test functions
+    function testSimpleBrushstroke() {
+      console.log('Testing simple brushstroke...');
+
+      const x = 200 + seededRandom() * 400;
+      const y = 150 + seededRandom() * 300;
+      const angle = seededRandom() * Math.PI * 2;
+      const length = 80 + seededRandom() * 120;
+      const width = 15 + seededRandom() * 25;
+
+      // Random color
+      const colors = [
+        new paper.Color(227/255, 168/255, 87/255),   // Yellow Ochre
+        new paper.Color(217/255, 96/255, 59/255),     // Vermilion
+        new paper.Color(41/255, 36/255, 33/255),      // Ivory Black
+        new paper.Color(252/255, 250/255, 242/255)    // Titanium White
+      ];
+      const color = colors[Math.floor(seededRandom() * colors.length)];
+
+      drawSimpleBrush(x, y, angle, length, width, color);
+      paper.view.update();
+    }
+
+    function testMultipleBristles() {
+      console.log('Testing multiple bristles...');
+
+      for (let i = 0; i < 10; i++) {
+        setTimeout(() => testSimpleBrushstroke(), i * 100);
+      }
+    }
+
+    function clearCanvas() {
+      paper.project.clear();
+
+      // Redraw background
+      const canvas = document.getElementById('testCanvas');
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = 'rgb(242, 235, 220)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      paper.view.update();
+    }
+
+    // Initial test
+    console.log('Oil brush test ready. Click buttons to test!');
+  </script>
+</body>
+</html>
