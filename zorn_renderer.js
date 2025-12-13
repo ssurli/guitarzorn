@@ -521,17 +521,16 @@ class Bristle {
   }
 
   updatePosition(newPosition) {
-    const previousPos = this.positions[0];
-    previousPos.x = newPosition.x;
-    previousPos.y = newPosition.y;
+    this.positions[0].x = newPosition.x;
+    this.positions[0].y = newPosition.y;
 
     for (let i = 1; i < this.nPositions; i++) {
       const pos = this.positions[i];
+      const prevPos = this.positions[i - 1];
       const length = this.lengths[i];
-      const ang = Math.atan2(previousPos.y - pos.y, previousPos.x - pos.x);
-      pos.x = previousPos.x - length * Math.cos(ang);
-      pos.y = previousPos.y - length * Math.sin(ang);
-      this.positions[i - 1] = previousPos;
+      const ang = Math.atan2(prevPos.y - pos.y, prevPos.x - pos.x);
+      pos.x = prevPos.x - length * Math.cos(ang);
+      pos.y = prevPos.y - length * Math.sin(ang);
     }
   }
 
@@ -690,11 +689,13 @@ class OilBrush {
 
 /**
  * Enhanced oil painting brushstroke using bristle simulation
+ * Optimized for real-time performance
  */
 function drawOilBrushstroke(x, y, angle, length, width, color, alpha = 0.9) {
-  const brush = new OilBrush(width);
-  const nSteps = Math.ceil(length / 2);
-  const speed = length / nSteps;
+  // Reduced complexity for performance: smaller brush, fewer steps
+  const brushSize = Math.min(width, 8); // Max 8 instead of unlimited
+  const brush = new OilBrush(brushSize);
+  const nSteps = Math.max(3, Math.ceil(length / 6)); // Fewer steps
 
   // Initialize brush at starting position
   brush.init({ x, y });
