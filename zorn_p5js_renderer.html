@@ -41,16 +41,71 @@
       text-align: center;
       margin-top: 20px;
     }
+    .slider-container {
+      margin: 15px 0;
+      display: inline-block;
+      width: 300px;
+    }
+    .slider-container label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    input[type="range"] {
+      width: 100%;
+      cursor: pointer;
+    }
+    .preset-buttons {
+      margin: 10px 0;
+    }
+    .preset-btn {
+      padding: 8px 16px;
+      font-size: 14px;
+      margin: 3px;
+      background: #444;
+    }
+    .preset-btn:hover {
+      background: #666;
+    }
+    .preset-btn.active {
+      background: #ff6b35;
+    }
   </style>
 </head>
 <body>
   <h1>🎨 Zorn Pentatonic Oil Painting Renderer - p5.js Version</h1>
 
   <div class="controls">
-    <button onclick="loadNotesAndPaint()">Load Notes & Paint</button>
-    <button onclick="clearPainting()">Clear Canvas</button>
+    <button onclick="loadNotesAndPaint()">🎨 Load Notes & Paint</button>
+    <button onclick="clearPainting()">🧹 Clear Canvas</button>
+
     <br><br>
-    <span>Brush Size: <span id="brushSizeDisplay">12</span></span>
+
+    <div class="preset-buttons">
+      <strong>Density Presets:</strong><br>
+      <button class="preset-btn" onclick="setDensity('low')">Low (Fast)</button>
+      <button class="preset-btn active" onclick="setDensity('medium')">Medium</button>
+      <button class="preset-btn" onclick="setDensity('high')">High (Slow)</button>
+      <button class="preset-btn" onclick="setDensity('ultra')">Ultra (Very Slow)</button>
+    </div>
+
+    <br>
+
+    <div class="slider-container">
+      <label>Strokes per Note: <span id="strokesValue">15</span></label>
+      <input type="range" id="strokesSlider" min="1" max="100" value="15" oninput="updateSliders()">
+    </div>
+
+    <div class="slider-container">
+      <label>Bristles per Stroke: <span id="bristlesValue">20</span></label>
+      <input type="range" id="bristlesSlider" min="5" max="80" value="20" oninput="updateSliders()">
+    </div>
+
+    <br>
+    <div style="margin-top: 10px; color: #aaa; font-size: 12px;">
+      Total strokes: <span id="totalStrokes">555</span> |
+      Painting progress: <span id="progress">0</span>/<span id="totalNotes">37</span> notes
+    </div>
   </div>
 
   <div id="canvasContainer"></div>
@@ -61,7 +116,19 @@
     let canvas;
     let painting = false;
     let currentNoteIndex = 0;
+    let currentStrokeIndex = 0;
     let brushSize = 12;
+
+    // Density settings (inspired by Javier's maxColorDiff concept)
+    let strokesPerNote = 15;
+    let bristlesPerStroke = 20;
+
+    const DENSITY_PRESETS = {
+      low: { strokes: 5, bristles: 10 },
+      medium: { strokes: 15, bristles: 20 },
+      high: { strokes: 50, bristles: 40 },
+      ultra: { strokes: 100, bristles: 60 }
+    };
 
     // Zorn Palette
     const ZORN_PALETTE = {
@@ -90,33 +157,51 @@
       };
 
       p.draw = function() {
-        // Auto-paint notes one by one when painting
+        // Auto-paint notes with multiple strokes per note
         if (painting && currentNoteIndex < notes.length) {
           const note = notes[currentNoteIndex];
-          paintNote(note, currentNoteIndex);
-          currentNoteIndex++;
+
+          // Paint multiple strokes for this note
+          paintNoteStroke(note, currentNoteIndex, currentStrokeIndex);
+          currentStrokeIndex++;
+
+          // Move to next note when all strokes are done
+          if (currentStrokeIndex >= strokesPerNote) {
+            currentStrokeIndex = 0;
+            currentNoteIndex++;
+
+            // Update progress display
+            document.getElementById('progress').textContent = currentNoteIndex;
+          }
 
           if (currentNoteIndex >= notes.length) {
             painting = false;
             console.log('✅ Painting complete!');
+            console.log(`Total strokes painted: ${notes.length * strokesPerNote}`);
           }
         }
       };
 
       //
-      // Paint a single note with oil brush technique
+      // Paint a single stroke for a note (called multiple times per note)
       //
-      function paintNote(note, index) {
+      function paintNoteStroke(note, noteIndex, strokeIndex) {
         // Map note position to canvas
         const totalDuration = notes[notes.length - 1].start_time + notes[notes.length - 1].duration;
-        const x = 50 + (note.start_time / totalDuration) * (p.width - 100);
-        const y = p.height / 2 + (60 - note.pitch) * 10;
+        const baseX = 50 + (note.start_time / totalDuration) * (p.width - 100);
+        const baseY = p.height / 2 + (60 - note.pitch) * 10;
+
+        // Add variation to position for multiple strokes
+        const variation = 20 + (note.velocity_value || 0.5) * 30;
+        const x = baseX + p.random(-variation, variation);
+        const y = baseY + p.random(-variation, variation);
 
         // Get color from pitch
         const color = getPaletteColor(note.pitch);
 
-        // Size based on velocity and dynamics
+        // Size based on velocity with variation
         let size = 30 + (note.velocity_value || 0.5) * 60;
+        size *= p.random(0.7, 1.3); // Vary size per stroke
 
         // Technique-based rendering
         const technique = note.technique || 'regular';
@@ -146,7 +231,7 @@
       // Oil brush stroke using p5.js bristle simulation
       //
       function drawOilBrushStroke(x, y, size, baseColor) {
-        const nBristles = Math.round(size * 0.8);
+        const nBristles = bristlesPerStroke; // Use density setting
         const angle = p.random(p.TWO_PI);
         const length = size * (0.8 + p.random(0.4));
 
@@ -369,6 +454,43 @@
     const myp5 = new p5(sketch);
 
     //
+    // Set density preset
+    //
+    function setDensity(preset) {
+      const settings = DENSITY_PRESETS[preset];
+      strokesPerNote = settings.strokes;
+      bristlesPerStroke = settings.bristles;
+
+      // Update sliders
+      document.getElementById('strokesSlider').value = strokesPerNote;
+      document.getElementById('bristlesSlider').value = bristlesPerStroke;
+      updateSliders();
+
+      // Update button states
+      document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      event.target.classList.add('active');
+
+      console.log(`🎨 Density set to ${preset}: ${strokesPerNote} strokes/note, ${bristlesPerStroke} bristles/stroke`);
+    }
+
+    //
+    // Update slider values
+    //
+    function updateSliders() {
+      strokesPerNote = parseInt(document.getElementById('strokesSlider').value);
+      bristlesPerStroke = parseInt(document.getElementById('bristlesSlider').value);
+
+      document.getElementById('strokesValue').textContent = strokesPerNote;
+      document.getElementById('bristlesValue').textContent = bristlesPerStroke;
+
+      // Update total strokes display
+      const totalStrokes = notes.length * strokesPerNote || strokesPerNote * 37;
+      document.getElementById('totalStrokes').textContent = totalStrokes;
+    }
+
+    //
     // Load notes and start painting
     //
     async function loadNotesAndPaint() {
@@ -377,13 +499,20 @@
         notes = await response.json();
         console.log(`✅ Loaded ${notes.length} notes`);
 
+        // Update UI
+        document.getElementById('totalNotes').textContent = notes.length;
+        document.getElementById('progress').textContent = 0;
+        updateSliders();
+
         // Reset
         currentNoteIndex = 0;
+        currentStrokeIndex = 0;
         myp5.background(CANVAS_BASE);
 
         // Start painting
         painting = true;
-        console.log('🎨 Starting oil painting...');
+        console.log(`🎨 Starting oil painting with ${strokesPerNote} strokes/note, ${bristlesPerStroke} bristles/stroke`);
+        console.log(`Total strokes: ${notes.length * strokesPerNote}`);
       } catch (error) {
         console.error('❌ Error loading notes:', error);
         alert('Errore nel caricamento note! Verifica che 1207(1)_notes.json esista.');
@@ -397,8 +526,15 @@
       myp5.background(CANVAS_BASE);
       painting = false;
       currentNoteIndex = 0;
+      currentStrokeIndex = 0;
+      document.getElementById('progress').textContent = 0;
       console.log('🧹 Canvas cleared');
     }
+
+    // Initialize on load
+    window.addEventListener('load', () => {
+      updateSliders();
+    });
   </script>
 </body>
 </html>
