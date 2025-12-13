@@ -986,10 +986,12 @@ function renderNote(note, noteIndex, growthFactor = 1.0) {
     }
   }
 
-  // OIL BRUSHSTROKE: Directional with bristle simulation
+  // BRUSHSTROKE: Directional (using simple version until oil brush is tested)
   const strokeAngle = contour === 'ascending' ? -Math.PI / 3 :
                      contour === 'descending' ? Math.PI / 3 : 0;
-  drawOilBrushstroke(x, y, strokeAngle, size * 1.5, size * 0.3, baseColor, 0.7);
+  // TODO: Re-enable oil brushstroke once tested in test_oil_brush.html
+  // drawOilBrushstroke(x, y, strokeAngle, size * 1.5, size * 0.3, baseColor, 0.7);
+  drawBrushstroke(x, y, strokeAngle, size * 1.5, size * 0.3, baseColor, 0.7, 'multiply');
 
   // DRIPPING: Descending
   if (contour === 'descending') {
