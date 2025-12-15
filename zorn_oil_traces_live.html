@@ -384,41 +384,58 @@
         let p = pos.copy();
         this.positions[0] = p;
 
-        // Genera traccia seguendo i gradienti dell'immagine
+        // Direzione iniziale basata sul gradiente del punto di partenza
+        let currentAngle = random(TWO_PI);
+        const momentum = 0.85;  // Smooth direction changes
+        const angleChangeMax = 0.15;  // Limita cambi di direzione bruschi
+
+        // Genera traccia seguendo i gradienti con smoothing
         for (let s = 1; s < nSteps; s++) {
           const x = round(p.x), y = round(p.y);
-          let ang = 0;
+          let targetAngle = currentAngle;
 
           // Calcola gradiente dell'immagine per seguire la forma
-          if (x > 0 && x < img.width - 1 && y > 0 && y < img.height - 1) {
-            // Calcola brightness dei pixel vicini
+          if (x > 1 && x < img.width - 2 && y > 1 && y < img.height - 2) {
+            // Calcola brightness dei pixel vicini (3x3 per più stabilità)
             const getBrightness = (px, py) => {
+              if (px < 0 || px >= img.width || py < 0 || py >= img.height) return 255;
               const idx = 4 * (px + py * img.width);
               return (img.pixels[idx] + img.pixels[idx + 1] + img.pixels[idx + 2]) / 3;
             };
 
-            const bCenter = getBrightness(x, y);
-            const bRight = getBrightness(x + 1, y);
-            const bLeft = getBrightness(x - 1, y);
-            const bDown = getBrightness(x, y + 1);
-            const bUp = getBrightness(x, y - 1);
+            // Sobel-like gradient (più robusto)
+            const gradX =
+              (-1 * getBrightness(x-1, y-1) + 1 * getBrightness(x+1, y-1)) +
+              (-2 * getBrightness(x-1, y) + 2 * getBrightness(x+1, y)) +
+              (-1 * getBrightness(x-1, y+1) + 1 * getBrightness(x+1, y+1));
 
-            // Gradiente (direzione del maggior cambiamento)
-            const gradX = bRight - bLeft;
-            const gradY = bDown - bUp;
+            const gradY =
+              (-1 * getBrightness(x-1, y-1) - 2 * getBrightness(x, y-1) - 1 * getBrightness(x+1, y-1)) +
+              (1 * getBrightness(x-1, y+1) + 2 * getBrightness(x, y+1) + 1 * getBrightness(x+1, y+1));
 
-            // Angolo tangente alla forma (perpendicolare al gradiente)
-            const gradAngle = atan2(gradY, gradX);
-            ang = gradAngle + HALF_PI;  // Tangente = gradiente + 90°
+            const gradMagnitude = sqrt(gradX * gradX + gradY * gradY);
 
-            // Aggiungi un po' di variazione naturale
-            ang += 0.3 * (noise(s * 0.1) - 0.5);
-          } else {
-            // Se fuori bordi, usa direzione precedente o random
-            ang = random(TWO_PI);
+            // Solo se il gradiente è significativo, usalo per guidare la direzione
+            if (gradMagnitude > 5) {  // Soglia per ignorare gradienti deboli
+              const gradAngle = atan2(gradY, gradX);
+              targetAngle = gradAngle + HALF_PI;  // Tangente alla forma
+            }
           }
 
-          p = createVector(p.x + speed * cos(ang), p.y + speed * sin(ang));
+          // Smooth angle change con momentum
+          let angleDiff = targetAngle - currentAngle;
+
+          // Normalizza la differenza tra -PI e PI
+          while (angleDiff > PI) angleDiff -= TWO_PI;
+          while (angleDiff < -PI) angleDiff += TWO_PI;
+
+          // Limita il cambio di direzione
+          angleDiff = constrain(angleDiff, -angleChangeMax, angleChangeMax);
+
+          // Applica momentum per smooth transition
+          currentAngle = currentAngle + angleDiff * (1 - momentum);
+
+          p = createVector(p.x + speed * cos(currentAngle), p.y + speed * sin(currentAngle));
           this.positions[s] = p;
         }
       }
