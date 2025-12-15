@@ -160,6 +160,9 @@
       const cnv = createCanvas(1200, 600);
       cnv.parent('canvasContainer');
 
+      // Initialize p5.brush
+      brush.instance(this);
+
       // Setup canvas
       background(CANVAS_BASE);
 
