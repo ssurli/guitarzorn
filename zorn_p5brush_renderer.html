@@ -77,6 +77,46 @@
       font-size: 12px;
       margin-top: 10px;
     }
+    .params-panel {
+      background: #2a2a2a;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 20px;
+      border: 2px solid #ff6b35;
+    }
+    .params-panel h3 {
+      margin-top: 0;
+      color: #ff6b35;
+      font-size: 16px;
+    }
+    .param-row {
+      margin: 10px 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .param-row label {
+      min-width: 150px;
+      font-size: 13px;
+    }
+    .param-row input[type="range"] {
+      flex: 1;
+    }
+    .param-row select {
+      flex: 1;
+      padding: 5px;
+      background: #444;
+      color: #f0f0f0;
+      border: 1px solid #666;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .param-value {
+      min-width: 40px;
+      text-align: right;
+      color: #ff6b35;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
@@ -117,6 +157,50 @@
     </div>
   </div>
 
+  <div class="params-panel">
+    <h3>🎨 Parametri Pittorici</h3>
+
+    <div class="param-row">
+      <label>Flow Field:</label>
+      <select id="flowFieldSelect" onchange="updateFlowField()">
+        <option value="none">None</option>
+        <option value="seabed" selected>Seabed (organic)</option>
+        <option value="waves">Waves</option>
+        <option value="zigzag">Zigzag</option>
+      </select>
+    </div>
+
+    <div class="param-row">
+      <label>Brush Scale:</label>
+      <input type="range" id="brushScaleSlider" min="0.5" max="3" value="1.5" step="0.1" oninput="updateBrushScale()">
+      <span class="param-value" id="brushScaleValue">1.5</span>
+    </div>
+
+    <div class="param-row">
+      <label>Stroke Length Min:</label>
+      <input type="range" id="strokeLengthMinSlider" min="0.5" max="2" value="1.2" step="0.1" oninput="updateStrokeParams()">
+      <span class="param-value" id="strokeLengthMinValue">1.2</span>
+    </div>
+
+    <div class="param-row">
+      <label>Stroke Length Max:</label>
+      <input type="range" id="strokeLengthMaxSlider" min="1.5" max="4" value="2.5" step="0.1" oninput="updateStrokeParams()">
+      <span class="param-value" id="strokeLengthMaxValue">2.5</span>
+    </div>
+
+    <div class="param-row">
+      <label>Weight Multiplier:</label>
+      <input type="range" id="weightMultiplierSlider" min="0.5" max="3" value="1.5" step="0.1" oninput="updateStrokeParams()">
+      <span class="param-value" id="weightMultiplierValue">1.5</span>
+    </div>
+
+    <div class="param-row">
+      <label>Position Variation:</label>
+      <input type="range" id="variationSlider" min="20" max="150" value="60" step="5" oninput="updateStrokeParams()">
+      <span class="param-value" id="variationValue">60</span>
+    </div>
+  </div>
+
   <div id="canvasContainer"></div>
 
   <!-- Audio element for synchronized playback -->
@@ -138,6 +222,14 @@
     // Density settings (defaults to medium preset)
     let strokesPerNote = 40;
     let brushWeight = 4;
+
+    // Painterly parameters (controllable via UI)
+    let brushScale = 1.5;
+    let strokeLengthMin = 1.2;
+    let strokeLengthMax = 2.5;
+    let weightMultiplier = 1.5;
+    let positionVariation = 60;
+    let currentFlowField = "seabed";
 
     const DENSITY_PRESETS = {
       low: { strokes: 15, weight: 3 },
@@ -168,10 +260,12 @@
       brush.load();
 
       // Add flow field for organic, painterly strokes
-      brush.field("seabed");
+      if (currentFlowField !== "none") {
+        brush.field(currentFlowField);
+      }
 
       // Scale up for more visible brushstrokes
-      brush.scale(1.5);
+      brush.scale(brushScale);
 
       brushReady = true;
 
@@ -243,10 +337,9 @@
       const baseX = 50 + (note.start_time / totalDuration) * (width - 100);
       const baseY = height / 2 + (60 - note.pitch) * 10;
 
-      // Add variation to position for multiple strokes
-      const variation = 40 + (note.velocity_value || 0.5) * 60;
-      const x = baseX + random(-variation, variation);
-      const y = baseY + random(-variation, variation);
+      // Add variation to position for multiple strokes (using UI parameter)
+      const x = baseX + random(-positionVariation, positionVariation);
+      const y = baseY + random(-positionVariation, positionVariation);
 
       // Get color from pitch
       const colorArray = getPaletteColor(note.pitch);
@@ -284,12 +377,12 @@
     // Oil brush stroke using p5.brush (using '2B' soft pencil)
     //
     function drawOilBrushStroke(x, y, size, col) {
-      // Set brush type, color, and weight - thicker for oil painting effect
-      brush.set('2B', col, brushWeight * 1.5);
+      // Set brush type, color, and weight - using UI parameters
+      brush.set('2B', col, brushWeight * weightMultiplier);
 
-      // Longer, more expressive strokes for oil painting look
+      // Stroke length controlled by UI parameters
       const angle = random(TWO_PI);
-      const length = size * random(1.2, 2.5);
+      const length = size * random(strokeLengthMin, strokeLengthMax);
 
       const x2 = x + cos(angle) * length;
       const y2 = y + sin(angle) * length;
@@ -541,6 +634,46 @@
       }
 
       console.log('🧹 Canvas cleared');
+    }
+
+    //
+    // Update flow field
+    //
+    function updateFlowField() {
+      currentFlowField = document.getElementById('flowFieldSelect').value;
+      if (currentFlowField === "none") {
+        brush.noField();
+      } else {
+        brush.field(currentFlowField);
+      }
+      console.log(`🎨 Flow field set to: ${currentFlowField}`);
+    }
+
+    //
+    // Update brush scale
+    //
+    function updateBrushScale() {
+      brushScale = parseFloat(document.getElementById('brushScaleSlider').value);
+      document.getElementById('brushScaleValue').textContent = brushScale.toFixed(1);
+      brush.scale(brushScale);
+      console.log(`🎨 Brush scale set to: ${brushScale}`);
+    }
+
+    //
+    // Update stroke parameters
+    //
+    function updateStrokeParams() {
+      strokeLengthMin = parseFloat(document.getElementById('strokeLengthMinSlider').value);
+      strokeLengthMax = parseFloat(document.getElementById('strokeLengthMaxSlider').value);
+      weightMultiplier = parseFloat(document.getElementById('weightMultiplierSlider').value);
+      positionVariation = parseInt(document.getElementById('variationSlider').value);
+
+      document.getElementById('strokeLengthMinValue').textContent = strokeLengthMin.toFixed(1);
+      document.getElementById('strokeLengthMaxValue').textContent = strokeLengthMax.toFixed(1);
+      document.getElementById('weightMultiplierValue').textContent = weightMultiplier.toFixed(1);
+      document.getElementById('variationValue').textContent = positionVariation;
+
+      console.log(`🎨 Stroke params updated - Length: ${strokeLengthMin}-${strokeLengthMax}, Weight: ${weightMultiplier}x, Variation: ${positionVariation}`);
     }
 
     // Initialize on load
