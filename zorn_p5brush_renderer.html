@@ -157,16 +157,17 @@
 
     // p5.js sketch
     function setup() {
-      const cnv = createCanvas(1200, 600);
+      const cnv = createCanvas(1200, 600, WEBGL);
       cnv.parent('canvasContainer');
+
+      // Load p5.brush
+      brush.load();
 
       // Setup canvas
       background(CANVAS_BASE);
 
-      // p5.brush is available globally after library load
-      console.log('✅ p5.brush canvas ready');
-      console.log('📚 p5.brush version loaded');
-      console.log('brush object:', typeof brush);
+      console.log('✅ p5.brush canvas ready with WEBGL');
+      console.log('📚 Available brushes:', brush.box());
     }
 
     function draw() {
@@ -222,10 +223,10 @@
     // Paint a single stroke for a note using p5.brush
     //
     function paintNoteStroke(note, noteIndex, strokeIndex) {
-      // Map note position to canvas
+      // Map note position to canvas (WEBGL coordinates: center is 0,0)
       const totalDuration = notes[notes.length - 1].start_time + notes[notes.length - 1].duration;
-      const baseX = 50 + (note.start_time / totalDuration) * (width - 100);
-      const baseY = height / 2 + (60 - note.pitch) * 10;
+      const baseX = -width/2 + 50 + (note.start_time / totalDuration) * (width - 100);
+      const baseY = (60 - note.pitch) * 10;
 
       // Add variation to position for multiple strokes
       const variation = 40 + (note.velocity_value || 0.5) * 60;
@@ -265,10 +266,12 @@
     }
 
     //
-    // Oil brush stroke using p5.brush
+    // Oil brush stroke using p5.brush (using '2B' soft pencil)
     //
     function drawOilBrushStroke(x, y, size, col) {
-      brush.set('oil', col, brushWeight);
+      brush.set('2B');
+      brush.stroke(col);
+      brush.strokeWeight(brushWeight);
 
       // Random directional stroke
       const angle = random(TWO_PI);
@@ -281,10 +284,12 @@
     }
 
     //
-    // Vibrato - wavy oil brush stroke
+    // Vibrato - wavy marker stroke
     //
     function drawVibratoWithBrush(x, y, size, col) {
-      brush.set('marker', col, brushWeight * 0.8);
+      brush.set('marker');
+      brush.stroke(col);
+      brush.strokeWeight(brushWeight * 0.8);
 
       const numPoints = 8;
       const amplitude = size * 0.3;
@@ -304,10 +309,12 @@
     }
 
     //
-    // Bend - curved oil brush stroke
+    // Bend - curved brush stroke
     //
     function drawBendWithBrush(x, y, size, col) {
-      brush.set('oil', col, brushWeight * 1.2);
+      brush.set('2B');
+      brush.stroke(col);
+      brush.strokeWeight(brushWeight * 1.2);
 
       const startY = y + size * 0.5;
       const endY = y - size * 0.5;
@@ -330,13 +337,15 @@
     }
 
     //
-    // Slide - diagonal oil brush stroke with spray
+    // Slide - diagonal spray brush stroke
     //
     function drawSlideWithBrush(x, y, size, col) {
+      brush.set('spray');
+      brush.stroke(col);
+      brush.strokeWeight(brushWeight * 1.5);
+
       const angle = random() > 0.5 ? -PI / 4 : PI / 4;
       const length = size * 1.5;
-
-      brush.set('spray', col, brushWeight * 1.5);
 
       const x2 = x + cos(angle) * length;
       const y2 = y + sin(angle) * length;
@@ -348,7 +357,9 @@
     // Staccato - dotted marker strokes
     //
     function drawStaccatoWithBrush(x, y, size, col) {
-      brush.set('marker', col, brushWeight * 1.5);
+      brush.set('marker');
+      brush.fill(col);
+      brush.noStroke();
 
       const numDots = 3 + floor(random(3));
 
@@ -366,10 +377,12 @@
     }
 
     //
-    // Legato - soft watercolor-like blended stroke
+    // Legato - soft charcoal-like blended stroke
     //
     function drawLegatoWithBrush(x, y, size, col) {
-      brush.set('watercolor', col, brushWeight * 2);
+      brush.set('charcoal');
+      brush.stroke(col);
+      brush.strokeWeight(brushWeight * 2);
 
       const angle = random(TWO_PI);
       const length = size * 1.8;
