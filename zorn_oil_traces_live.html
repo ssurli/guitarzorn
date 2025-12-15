@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Zorn Oil Painting - Intelligent Traces</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.2/p5.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: 'Monaco', 'Courier New', monospace;
+      background: #1a1a1a;
+      color: #f0f0f0;
+    }
+    h1 {
+      text-align: center;
+      color: #ff6b35;
+      font-size: 24px;
+    }
+    .controls {
+      text-align: center;
+      margin: 20px auto;
+      padding: 20px;
+      background: #2a2a2a;
+      border-radius: 8px;
+      max-width: 900px;
+    }
+    button {
+      padding: 12px 24px;
+      font-size: 16px;
+      margin: 5px;
+      cursor: pointer;
+      background: #ff6b35;
+      color: white;
+      border: none;
+      border-radius: 4px;
+    }
+    button:hover {
+      background: #ff8555;
+    }
+    button:disabled {
+      background: #666;
+      cursor: not-allowed;
+    }
+    #canvasContainer {
+      text-align: center;
+      margin-top: 20px;
+    }
+    .info {
+      color: #aaa;
+      font-size: 13px;
+      margin-top: 15px;
+      line-height: 1.8;
+    }
+    .info strong {
+      color: #ff6b35;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎨 Zorn Pentatonic - Oil Painting con Tracce Intelligenti + Audio Live</h1>
+
+  <div class="controls">
+    <button id="startBtn" onclick="startPainting()">▶ Start Painting with Audio</button>
+    <button onclick="pausePainting()">⏸ Pause</button>
+    <button onclick="clearCanvas()">🧹 Clear & Restart</button>
+
+    <div class="info">
+      <strong>Tracce:</strong> <span id="traces">0</span> |
+      <strong>Brush:</strong> <span id="brush">--</span>px |
+      <strong>Bad pixels:</strong> <span id="bad">--</span><br>
+      <small>Algoritmo: Javier Gracia Carpio | Source: zorn_pentatonic_pure_musical.png</small>
+    </div>
+  </div>
+
+  <div id="canvasContainer"></div>
+
+  <audio id="audio" preload="auto" style="display:none">
+    <source src="1207(1)_audio.wav" type="audio/wav">
+  </audio>
+
+  <script>
+    // Parameters
+    const MAX_COLOR_DIFF = [40, 40, 40];
+    const SMALLER_BRUSH = 4;
+    const BRUSH_DECREMENT = 1.3;
+    const MAX_INVALID_TRAJ = 5000;
+    const MAX_INVALID_TRAJ_SMALL = 10000;
+    const MAX_INVALID_TRACES = 250;
+    const MAX_INVALID_TRACES_SMALL = 350;
+    const TRACE_SPEED = 2;
+    const REL_TRACE_LENGTH = 2.3;
+    const MIN_TRACE_LENGTH = 16;
+
+    let img, imgW, imgH;
+    let bgColor;
+    let similarColorPx = [];
+    let visitedPx = [];
+    let badPaintedPx = [];
+    let nBadPx = 0;
+    let avgBrushSize;
+    let trace;
+    let nTraces = 0;
+    let isPainting = false;
+    let audio;
+
+    function preload() {
+      img = loadImage('zorn_pentatonic_pure_musical.png');
+    }
+
+    function setup() {
+      if (img.width > 1200) img.resize(1200, 0);
+
+      imgW = img.width;
+      imgH = img.height;
+
+      createCanvas(imgW, imgH).parent('canvasContainer');
+      img.loadPixels();
+
+      bgColor = color(255);
+      strokeCap(SQUARE);
+      background(bgColor);
+
+      const nPx = imgW * imgH;
+      for (let i = 0; i < nPx; i++) {
+        similarColorPx[i] = false;
+        visitedPx[i] = false;
+        badPaintedPx[i] = i;
+      }
+      nBadPx = nPx;
+
+      avgBrushSize = max(SMALLER_BRUSH, max(imgW, imgH) / 6);
+
+      updateUI();
+      noLoop();
+
+      console.log('Canvas ready:', imgW, 'x', imgH, '| Brush:', avgBrushSize);
+    }
+
+    function draw() {
+      if (!isPainting) return;
+
+      if (!trace) {
+        trace = getValidTrace();
+        if (!trace) {
+          isPainting = false;
+          noLoop();
+          console.log('Painting complete! Traces:', nTraces);
+          return;
+        }
+      }
+
+      trace.paint(visitedPx, imgW, imgH);
+      trace = undefined;
+      updatePixelArrays();
+      updateUI();
+    }
+
+    function getValidTrace() {
+      let invalidTraj = 0, invalidTraces = 0;
+
+      while (true) {
+        if (avgBrushSize === SMALLER_BRUSH &&
+            (invalidTraj > MAX_INVALID_TRAJ_SMALL || invalidTraces > MAX_INVALID_TRACES_SMALL)) {
+          return undefined;
+        }
+
+        if (avgBrushSize > SMALLER_BRUSH &&
+            (invalidTraj > MAX_INVALID_TRAJ || invalidTraces > MAX_INVALID_TRACES)) {
+          avgBrushSize = max(SMALLER_BRUSH, min(avgBrushSize / BRUSH_DECREMENT, avgBrushSize - 2));
+          console.log('Riducendo brush a:', round(avgBrushSize));
+          invalidTraj = 0;
+          invalidTraces = 0;
+
+          for (let i = 0; i < imgW * imgH; i++) visitedPx[i] = false;
+        }
+
+        let validTraj = false;
+        const bSize = max(SMALLER_BRUSH, avgBrushSize * random(0.95, 1.05));
+        const nSteps = round(max(MIN_TRACE_LENGTH, REL_TRACE_LENGTH * bSize * random(0.9, 1.1)) / TRACE_SPEED);
+        let t;
+
+        while (!validTraj && invalidTraj % 500 !== 499) {
+          const px = badPaintedPx[floor(random(nBadPx))];
+          const startPos = createVector(px % imgW, floor(px / imgW));
+          t = new Trace(startPos, nSteps, TRACE_SPEED);
+          validTraj = t.hasValidTrajectory(similarColorPx, visitedPx, img);
+          invalidTraj++;
+        }
+
+        if (validTraj) {
+          invalidTraj = 0;
+          t.setBrushSize(bSize);
+
+          if (t.calculateColors(MAX_COLOR_DIFF, similarColorPx, img, bgColor)) {
+            nTraces++;
+            return t;
+          } else {
+            invalidTraces++;
+          }
+        } else {
+          invalidTraj++;
+          invalidTraces++;
+        }
+      }
+    }
+
+    function updatePixelArrays() {
+      loadPixels();
+      nBadPx = 0;
+      const rBg = red(bgColor), gBg = green(bgColor), bBg = blue(bgColor);
+
+      for (let x = 0; x < imgW; x++) {
+        for (let y = 0; y < imgH; y++) {
+          const px = x + y * imgW;
+          const iPx = 4 * px;
+          const cPx = 4 * (x + y * width);
+
+          const rP = pixels[cPx], gP = pixels[cPx + 1], bP = pixels[cPx + 2];
+          let well = false;
+
+          if (rP !== rBg || gP !== gBg || bP !== bBg) {
+            well = abs(img.pixels[iPx] - rP) < MAX_COLOR_DIFF[0] &&
+                   abs(img.pixels[iPx + 1] - gP) < MAX_COLOR_DIFF[1] &&
+                   abs(img.pixels[iPx + 2] - bP) < MAX_COLOR_DIFF[2];
+          }
+
+          similarColorPx[px] = well;
+          if (!well) badPaintedPx[nBadPx++] = px;
+        }
+      }
+      updatePixels();
+    }
+
+    async function startPainting() {
+      if (isPainting) return;
+
+      isPainting = true;
+      loop();
+
+      audio = document.getElementById('audio');
+      try {
+        audio.currentTime = 0;
+        await audio.play();
+        console.log('Audio playing');
+      } catch(e) {
+        console.warn('Audio failed:', e);
+      }
+
+      document.getElementById('startBtn').disabled = true;
+    }
+
+    function pausePainting() {
+      isPainting = false;
+      noLoop();
+      if (audio && !audio.paused) audio.pause();
+      document.getElementById('startBtn').disabled = false;
+    }
+
+    function clearCanvas() {
+      background(bgColor);
+      isPainting = false;
+      noLoop();
+
+      const nPx = imgW * imgH;
+      for (let i = 0; i < nPx; i++) {
+        similarColorPx[i] = false;
+        visitedPx[i] = false;
+        badPaintedPx[i] = i;
+      }
+      nBadPx = nPx;
+      avgBrushSize = max(SMALLER_BRUSH, max(imgW, imgH) / 6);
+      trace = undefined;
+      nTraces = 0;
+
+      if (audio && !audio.paused) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+
+      document.getElementById('startBtn').disabled = false;
+      updateUI();
+    }
+
+    function updateUI() {
+      document.getElementById('traces').textContent = nTraces;
+      document.getElementById('brush').textContent = round(avgBrushSize);
+      document.getElementById('bad').textContent = nBadPx;
+    }
+
+    // TRACE CLASS
+    class Trace {
+      constructor(pos, nSteps, speed) {
+        this.noiseFactor = 0.007;
+        this.maxSimColorFracTraj = 0.6;
+        this.maxVisitsFracTraj = 0.35;
+        this.minInsideFracTraj = 0.4;
+        this.maxColorStDevTraj = 45;
+        this.colorChange = 12;
+        this.minAlpha = 20;
+
+        this.nSteps = nSteps;
+        this.positions = [];
+        this.colors = [];
+        this.alphas = [];
+        this.brush = undefined;
+        this.nBristles = 0;
+
+        let p = pos.copy();
+        this.positions[0] = p;
+        const initAng = random(TWO_PI);
+        const nSeed = random(1000);
+
+        for (let s = 1; s < nSteps; s++) {
+          const ang = initAng + TWO_PI * (noise(nSeed + this.noiseFactor * s) - 0.5);
+          p = createVector(p.x + speed * cos(ang), p.y + speed * sin(ang));
+          this.positions[s] = p;
+        }
+      }
+
+      hasValidTrajectory(simCol, visited, img) {
+        let inside = 0, simCol Counter = 0, visitCnt = 0;
+        let rSum = 0, rSqSum = 0, gSum = 0, gSqSum = 0, bSum = 0, bSqSum = 0;
+
+        for (let s = 0; s < this.nSteps; s++) {
+          const p = this.positions[s];
+          const x = round(p.x), y = round(p.y);
+
+          if (x >= 0 && x < img.width && y >= 0 && y < img.height) {
+            inside++;
+            const px = x + y * img.width;
+            if (simCol[px]) simColCounter++;
+            if (visited[px]) visitCnt++;
+
+            const iPx = 4 * px;
+            const r = img.pixels[iPx], g = img.pixels[iPx + 1], b = img.pixels[iPx + 2];
+            rSum += r; rSqSum += r * r;
+            gSum += g; gSqSum += g * g;
+            bSum += b; bSqSum += b * b;
+          }
+        }
+
+        let rStDev = 0, gStDev = 0, bStDev = 0;
+        if (inside > 1) {
+          rStDev = sqrt((rSqSum - rSum * rSum / inside) / (inside - 1));
+          gStDev = sqrt((gSqSum - gSum * gSum / inside) / (inside - 1));
+          bStDev = sqrt((bSqSum - bSum * bSum / inside) / (inside - 1));
+        }
+
+        return inside >= this.minInsideFracTraj * this.nSteps &&
+               simColCounter <= this.maxSimColorFracTraj * inside &&
+               visitCnt <= this.maxVisitsFracTraj * inside &&
+               rStDev < this.maxColorStDevTraj &&
+               gStDev < this.maxColorStDevTraj &&
+               bStDev < this.maxColorStDevTraj;
+      }
+
+      setBrushSize(bSize) {
+        this.brush = new Brush(bSize);
+        this.brush.init(this.positions[0]);
+        this.nBristles = this.brush.getNBristles();
+      }
+
+      calculateColors(maxDiff, simCol, img, bg) {
+        const alphaDec = min(255 / this.nSteps, 25);
+        let alpha = 255 + alphaDec;
+
+        for (let s = 0; s < this.nSteps; s++) {
+          alpha -= alphaDec;
+          this.alphas[s] = constrain(round(alpha), 2, 255);
+          for (let b = 0; b < this.nBristles; b++) {
+            this.colors[3 * (b + s * this.nBristles)] = -1;
+          }
+        }
+
+        let rAvg = 0, gAvg = 0, bAvg = 0, cnt = 0;
+
+        for (let s = 0; s < this.nSteps; s++) {
+          const p = this.positions[s];
+          const x = round(p.x), y = round(p.y);
+
+          if (x >= 0 && x < img.width && y >= 0 && y < img.height) {
+            const px = 4 * (x + y * img.width);
+            rAvg += img.pixels[px];
+            gAvg += img.pixels[px + 1];
+            bAvg += img.pixels[px + 2];
+            cnt++;
+          }
+        }
+
+        if (cnt > 0) {
+          rAvg /= cnt;
+          gAvg /= cnt;
+          bAvg /= cnt;
+        }
+
+        const nSeed = random(1000);
+        for (let b = 0; b < this.nBristles; b++) {
+          const loc = 3 * b;
+          const delta = this.colorChange * (noise(nSeed + 0.4 * b) - 0.5);
+          this.colors[loc] = constrain(rAvg + delta, 0, 255);
+          this.colors[loc + 1] = constrain(gAvg + delta, 0, 255);
+          this.colors[loc + 2] = constrain(bAvg + delta, 0, 255);
+        }
+
+        for (let s = 1; s < this.nSteps; s++) {
+          for (let b = 0; b < this.nBristles; b++) {
+            const loc = 3 * (b + s * this.nBristles);
+            const loc0 = 3 * b;
+            this.colors[loc] = this.colors[loc0];
+            this.colors[loc + 1] = this.colors[loc0 + 1];
+            this.colors[loc + 2] = this.colors[loc0 + 2];
+          }
+        }
+
+        return true;
+      }
+
+      paint(visited, w, h) {
+        const bCols = [];
+
+        for (let s = 0; s < this.nSteps; s++) {
+          const a = this.alphas[s];
+
+          for (let b = 0; b < this.nBristles; b++) {
+            const loc = 3 * (b + s * this.nBristles);
+            bCols[b] = color(this.colors[loc], this.colors[loc + 1], this.colors[loc + 2], a);
+          }
+
+          this.brush.update(this.positions[s], true);
+          this.brush.paintOnScreen(bCols);
+
+          if (a > this.minAlpha) {
+            const bPos = this.brush.getBristlesPositions();
+            if (bPos) {
+              for (let b = 0; b < this.nBristles; b++) {
+                const p = bPos[b];
+                const x = round(p.x), y = round(p.y);
+                if (x >= 0 && x < w && y >= 0 && y < h) {
+                  visited[x + y * w] = true;
+                }
+              }
+            }
+          }
+        }
+
+        this.brush.init(this.positions[0]);
+      }
+    }
+
+    // BRISTLE CLASS
+    class Bristle {
+      constructor(nElem, thickness) {
+        this.nPos = nElem + 1;
+        this.pos = [];
+        this.len = [];
+        this.thick = [];
+
+        const tDec = thickness / nElem;
+        for (let i = 0; i < this.nPos; i++) {
+          this.pos[i] = createVector(0, 0);
+          this.len[i] = this.nPos - i;
+          this.thick[i] = thickness - (i - 1) * tDec;
+        }
+      }
+
+      setPosition(newPos) {
+        for (let i = 0; i < this.nPos; i++) {
+          this.pos[i].set(newPos);
+        }
+      }
+
+      updatePosition(newPos) {
+        this.pos[0].set(newPos);
+
+        for (let i = 1; i < this.nPos; i++) {
+          const prev = this.pos[i - 1];
+          const curr = this.pos[i];
+          const ang = atan2(prev.y - curr.y, prev.x - curr.x);
+          curr.x = prev.x - this.len[i] * cos(ang);
+          curr.y = prev.y - this.len[i] * sin(ang);
+        }
+      }
+
+      paintOnScreen(col) {
+        stroke(col);
+        let prev = this.pos[0];
+
+        for (let i = 1; i < this.nPos; i++) {
+          const curr = this.pos[i];
+          strokeWeight(this.thick[i]);
+          line(prev.x, prev.y, curr.x, curr.y);
+          prev = curr;
+        }
+      }
+    }
+
+    // BRUSH CLASS
+    class Brush {
+      constructor(size) {
+        this.maxBristleLen = 15;
+        this.maxBristleThick = 5;
+        this.posForAvg = 4;
+        this.bristleVertNoise = 8;
+        this.maxBristleHorNoise = 4;
+        this.noiseSpeedFac = 0.04;
+
+        this.position = createVector(0, 0);
+        this.nBristles = round(size * random(1.6, 1.9));
+        this.bristles = [];
+        this.bOffsets = [];
+        this.bPositions = [];
+        this.posHistory = [];
+        this.avgPosition = this.position.copy();
+        this.noiseSeed = random(1000);
+        this.updatesCnt = 0;
+        this.bristleHorNoise = min(0.3 * size, this.maxBristleHorNoise);
+
+        const bLen = min(size, this.maxBristleLen);
+        const nElem = round(sqrt(2 * bLen));
+        const bThick = min(0.8 * bLen, this.maxBristleThick);
+
+        for (let b = 0; b < this.nBristles; b++) {
+          this.bristles[b] = new Bristle(nElem, bThick);
+          this.bOffsets[b] = createVector(size * random(-0.5, 0.5), this.bristleVertNoise * random(-0.5, 0.5));
+          this.bPositions[b] = createVector(0, 0);
+        }
+      }
+
+      init(newPos) {
+        this.position.set(newPos);
+        this.posHistory = [];
+        this.avgPosition.set(this.position);
+        this.updatesCnt = 0;
+      }
+
+      update(newPos, updateElems) {
+        this.position.set(newPos);
+
+        const hSize = this.posHistory.length;
+        if (hSize < this.posForAvg) {
+          this.posHistory[hSize] = newPos.copy();
+        } else {
+          this.posHistory[this.updatesCnt % this.posForAvg].set(newPos);
+        }
+
+        let xAvg = 0, yAvg = 0;
+        const currSize = min(hSize + 1, this.posForAvg);
+        for (let i = 0; i < currSize; i++) {
+          xAvg += this.posHistory[i].x;
+          yAvg += this.posHistory[i].y;
+        }
+        xAvg /= currSize;
+        yAvg /= currSize;
+
+        const dirAng = HALF_PI + atan2(yAvg - this.avgPosition.y, xAvg - this.avgPosition.x);
+        this.avgPosition.set(xAvg, yAvg);
+
+        this.updateBristlePositions(dirAng);
+
+        if (updateElems) {
+          if (currSize === this.posForAvg) {
+            for (let b = 0; b < this.nBristles; b++) {
+              this.bristles[b].updatePosition(this.bPositions[b]);
+            }
+          } else if (currSize === this.posForAvg - 1) {
+            for (let b = 0; b < this.nBristles; b++) {
+              this.bristles[b].setPosition(this.bPositions[b]);
+            }
+          }
+        }
+
+        this.updatesCnt++;
+      }
+
+      updateBristlePositions(dirAng) {
+        if (this.posHistory.length >= this.posForAvg - 1) {
+          const c = cos(dirAng), s = sin(dirAng);
+          const nPos = this.noiseSeed + this.noiseSpeedFac * this.updatesCnt;
+
+          for (let b = 0; b < this.nBristles; b++) {
+            const off = this.bOffsets[b];
+            const x = off.x + this.bristleHorNoise * (noise(nPos + 0.1 * b) - 0.5);
+            const y = off.y;
+
+            const p = this.bPositions[b];
+            p.x = this.position.x + (x * c - y * s);
+            p.y = this.position.y + (x * s + y * c);
+          }
+        }
+      }
+
+      paintOnScreen(cols) {
+        if (this.posHistory.length === this.posForAvg) {
+          for (let b = 0; b < this.nBristles; b++) {
+            this.bristles[b].paintOnScreen(cols[b]);
+          }
+        }
+      }
+
+      getNBristles() {
+        return this.nBristles;
+      }
+
+      getBristlesPositions() {
+        if (this.posHistory.length === this.posForAvg) {
+          return this.bPositions;
+        }
+      }
+    }
+  </script>
+</body>
+</html>
