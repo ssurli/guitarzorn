@@ -176,6 +176,9 @@
       // Only paint if brush is ready
       if (!brushReady) return;
 
+      // Translate to top-left origin (WEBGL has center at 0,0)
+      translate(-width/2, -height/2);
+
       // Audio-synchronized painting
       if (paintingWithAudio && audioElement && !audioElement.paused) {
         const currentTime = audioElement.currentTime;
@@ -228,10 +231,10 @@
     // Paint a single stroke for a note using p5.brush
     //
     function paintNoteStroke(note, noteIndex, strokeIndex) {
-      // Map note position to canvas (WEBGL: 0,0 is center)
+      // Map note position to canvas (translated to top-left origin)
       const totalDuration = notes[notes.length - 1].start_time + notes[notes.length - 1].duration;
-      const baseX = -width/2 + 50 + (note.start_time / totalDuration) * (width - 100);
-      const baseY = (60 - note.pitch) * 10;
+      const baseX = 50 + (note.start_time / totalDuration) * (width - 100);
+      const baseY = height / 2 + (60 - note.pitch) * 10;
 
       // Add variation to position for multiple strokes
       const variation = 40 + (note.velocity_value || 0.5) * 60;
@@ -274,9 +277,8 @@
     // Oil brush stroke using p5.brush (using '2B' soft pencil)
     //
     function drawOilBrushStroke(x, y, size, col) {
-      brush.set('2B');
-      brush.stroke(col);
-      brush.strokeWeight(brushWeight);
+      // Set brush type, color, and weight in one call
+      brush.set('2B', col, brushWeight);
 
       // Random directional stroke
       const angle = random(TWO_PI);
@@ -292,9 +294,7 @@
     // Vibrato - wavy marker stroke
     //
     function drawVibratoWithBrush(x, y, size, col) {
-      brush.set('marker');
-      brush.stroke(col);
-      brush.strokeWeight(brushWeight * 0.8);
+      brush.set('marker', col, brushWeight * 0.8);
 
       const numPoints = 8;
       const amplitude = size * 0.3;
@@ -317,9 +317,7 @@
     // Bend - curved brush stroke
     //
     function drawBendWithBrush(x, y, size, col) {
-      brush.set('2B');
-      brush.stroke(col);
-      brush.strokeWeight(brushWeight * 1.2);
+      brush.set('2B', col, brushWeight * 1.2);
 
       const startY = y + size * 0.5;
       const endY = y - size * 0.5;
@@ -345,9 +343,7 @@
     // Slide - diagonal spray brush stroke
     //
     function drawSlideWithBrush(x, y, size, col) {
-      brush.set('spray');
-      brush.stroke(col);
-      brush.strokeWeight(brushWeight * 1.5);
+      brush.set('spray', col, brushWeight * 1.5);
 
       const angle = random() > 0.5 ? -PI / 4 : PI / 4;
       const length = size * 1.5;
@@ -362,9 +358,8 @@
     // Staccato - dotted marker strokes
     //
     function drawStaccatoWithBrush(x, y, size, col) {
-      brush.set('marker');
-      brush.fill(col);
-      brush.noStroke();
+      brush.set('marker', col, brushWeight * 1.5);
+      brush.fill(col, 150);  // Fill with transparency
 
       const numDots = 3 + floor(random(3));
 
@@ -379,15 +374,14 @@
 
       // Center dot
       brush.circle(x, y, size * 0.25);
+      brush.noFill();
     }
 
     //
     // Legato - soft charcoal-like blended stroke
     //
     function drawLegatoWithBrush(x, y, size, col) {
-      brush.set('charcoal');
-      brush.stroke(col);
-      brush.strokeWeight(brushWeight * 2);
+      brush.set('charcoal', col, brushWeight * 2);
 
       const angle = random(TWO_PI);
       const length = size * 1.8;
