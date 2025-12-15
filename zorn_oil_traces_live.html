@@ -121,16 +121,21 @@
       pixelDensity(1);  // Migliora performance per readback operations
 
       // Inizializza p5.brush per effetti pittorici realistici
-      brush.load();
+      // Nota: p5.brush si auto-inizializza dopo createCanvas
 
-      // Configura bleed e texture per effetto oil painting
-      brush.bleed(0.3, "out");  // Sanguinamento verso esterno
-      brush.fillTexture(0.6, 0.8);  // Texture pittorica
-
-      // Usa brush tipo "marker2" per pennellate più pittoriche
-      brush.field("seabed");  // Flow field organico
-
-      brushReady = true;
+      // Aspetta un frame per far inizializzare p5.brush
+      setTimeout(() => {
+        if (typeof brush !== 'undefined') {
+          // Configura bleed e texture per effetto oil painting
+          brush.bleed(0.3, "out");  // Sanguinamento verso esterno
+          brush.fillTexture(0.6, 0.8);  // Texture pittorica
+          brush.field("seabed");  // Flow field organico
+          brushReady = true;
+          console.log('✓ p5.brush ready');
+        } else {
+          console.warn('⚠️ p5.brush not available, using fallback');
+        }
+      }, 100);
 
       img.loadPixels();
 
