@@ -222,7 +222,7 @@
         while (!validTraj && invalidTraj % 500 !== 499) {
           const px = badPaintedPx[floor(random(nBadPx))];
           const startPos = createVector(px % imgW, floor(px / imgW));
-          t = new Trace(startPos, nSteps, TRACE_SPEED);
+          t = new Trace(startPos, nSteps, TRACE_SPEED, img);  // Passo img
           validTraj = t.hasValidTrajectory(similarColorPx, visitedPx, img);
           invalidTraj++;
         }
@@ -357,7 +357,7 @@
 
     // TRACE CLASS
     class Trace {
-      constructor(pos, nSteps, speed) {
+      constructor(pos, nSteps, speed, img) {  // Aggiungo img come parametro
         this.noiseFactor = 0.007;
         this.maxSimColorFracTraj = 0.6;
         this.maxVisitsFracTraj = 0.35;
@@ -375,11 +375,41 @@
 
         let p = pos.copy();
         this.positions[0] = p;
-        const initAng = random(TWO_PI);
-        const nSeed = random(1000);
 
+        // Genera traccia seguendo i gradienti dell'immagine
         for (let s = 1; s < nSteps; s++) {
-          const ang = initAng + TWO_PI * (noise(nSeed + this.noiseFactor * s) - 0.5);
+          const x = round(p.x), y = round(p.y);
+          let ang = 0;
+
+          // Calcola gradiente dell'immagine per seguire la forma
+          if (x > 0 && x < img.width - 1 && y > 0 && y < img.height - 1) {
+            // Calcola brightness dei pixel vicini
+            const getBrightness = (px, py) => {
+              const idx = 4 * (px + py * img.width);
+              return (img.pixels[idx] + img.pixels[idx + 1] + img.pixels[idx + 2]) / 3;
+            };
+
+            const bCenter = getBrightness(x, y);
+            const bRight = getBrightness(x + 1, y);
+            const bLeft = getBrightness(x - 1, y);
+            const bDown = getBrightness(x, y + 1);
+            const bUp = getBrightness(x, y - 1);
+
+            // Gradiente (direzione del maggior cambiamento)
+            const gradX = bRight - bLeft;
+            const gradY = bDown - bUp;
+
+            // Angolo tangente alla forma (perpendicolare al gradiente)
+            const gradAngle = atan2(gradY, gradX);
+            ang = gradAngle + HALF_PI;  // Tangente = gradiente + 90°
+
+            // Aggiungi un po' di variazione naturale
+            ang += 0.3 * (noise(s * 0.1) - 0.5);
+          } else {
+            // Se fuori bordi, usa direzione precedente o random
+            ang = random(TWO_PI);
+          }
+
           p = createVector(p.x + speed * cos(ang), p.y + speed * sin(ang));
           this.positions[s] = p;
         }
