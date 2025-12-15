@@ -81,16 +81,16 @@
 
   <script>
     // Parameters
-    const MAX_COLOR_DIFF = [40, 40, 40];
-    const SMALLER_BRUSH = 4;
+    const MAX_COLOR_DIFF = [30, 30, 30];  // Ridotto per seguire meglio i simboli
+    const SMALLER_BRUSH = 2;  // Ridotto da 4 a 2
     const BRUSH_DECREMENT = 1.3;
     const MAX_INVALID_TRAJ = 5000;
     const MAX_INVALID_TRAJ_SMALL = 10000;
     const MAX_INVALID_TRACES = 250;
     const MAX_INVALID_TRACES_SMALL = 350;
-    const TRACE_SPEED = 2;
-    const REL_TRACE_LENGTH = 2.3;
-    const MIN_TRACE_LENGTH = 16;
+    const TRACE_SPEED = 1.5;  // Ridotto da 2 a 1.5 per tracce più corte
+    const REL_TRACE_LENGTH = 1.8;  // Ridotto da 2.3 a 1.8
+    const MIN_TRACE_LENGTH = 12;  // Ridotto da 16 a 12
 
     let img, imgW, imgH;
     let bgColor;
@@ -115,6 +115,7 @@
       imgH = img.height;
 
       createCanvas(imgW, imgH).parent('canvasContainer');
+      pixelDensity(1);  // Migliora performance per readback operations
       img.loadPixels();
 
       bgColor = color(255);
@@ -129,7 +130,7 @@
       }
       nBadPx = nPx;
 
-      avgBrushSize = max(SMALLER_BRUSH, max(imgW, imgH) / 6);
+      avgBrushSize = max(SMALLER_BRUSH, max(imgW, imgH) / 20);  // Ridotto per pennellate più piccole
 
       updateUI();
       noLoop();
@@ -138,6 +139,15 @@
     }
 
     function draw() {
+      // Ferma se l'audio è finito
+      if (audio && audio.ended) {
+        isPainting = false;
+        noLoop();
+        console.log('🎵 Audio terminato - pittura fermata. Traces:', nTraces);
+        document.getElementById('startBtn').disabled = false;
+        return;
+      }
+
       if (!isPainting) return;
 
       if (!trace) {
@@ -145,7 +155,7 @@
         if (!trace) {
           isPainting = false;
           noLoop();
-          console.log('Painting complete! Traces:', nTraces);
+          console.log('✅ Painting complete! Traces:', nTraces);
           return;
         }
       }
@@ -242,9 +252,17 @@
       try {
         audio.currentTime = 0;
         await audio.play();
-        console.log('Audio playing');
+        console.log('🎵 Audio playing');
+
+        // Ferma la pittura quando l'audio finisce
+        audio.onended = () => {
+          isPainting = false;
+          noLoop();
+          console.log('🎵 Audio terminato');
+          document.getElementById('startBtn').disabled = false;
+        };
       } catch(e) {
-        console.warn('Audio failed:', e);
+        console.warn('⚠️ Audio failed:', e);
       }
 
       document.getElementById('startBtn').disabled = true;
@@ -269,7 +287,7 @@
         badPaintedPx[i] = i;
       }
       nBadPx = nPx;
-      avgBrushSize = max(SMALLER_BRUSH, max(imgW, imgH) / 6);
+      avgBrushSize = max(SMALLER_BRUSH, max(imgW, imgH) / 20);  // Ridotto per pennellate più piccole
       trace = undefined;
       nTraces = 0;
 
