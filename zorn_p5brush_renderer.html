@@ -133,6 +133,7 @@
     let currentNoteIndex = 0;
     let currentStrokeIndex = 0;
     let audioElement = null;
+    let brushReady = false;  // Flag to check if brush is loaded
 
     // Density settings
     let strokesPerNote = 20;
@@ -157,20 +158,24 @@
 
     // p5.js sketch
     function setup() {
-      const cnv = createCanvas(1200, 600);  // 2D mode for p5.brush
+      const cnv = createCanvas(1200, 600, WEBGL);
       cnv.parent('canvasContainer');
 
-      // Load p5.brush
-      brush.load();
-
-      // Setup canvas
+      // Setup canvas background
       background(CANVAS_BASE);
 
-      console.log('✅ p5.brush canvas ready (2D mode)');
+      // Load p5.brush and set flag when ready
+      brush.load();
+      brushReady = true;
+
+      console.log('✅ p5.brush canvas ready (WEBGL mode)');
       console.log('📚 Available brushes:', brush.box());
     }
 
     function draw() {
+      // Only paint if brush is ready
+      if (!brushReady) return;
+
       // Audio-synchronized painting
       if (paintingWithAudio && audioElement && !audioElement.paused) {
         const currentTime = audioElement.currentTime;
@@ -223,10 +228,10 @@
     // Paint a single stroke for a note using p5.brush
     //
     function paintNoteStroke(note, noteIndex, strokeIndex) {
-      // Map note position to canvas (2D mode: 0,0 is top-left)
+      // Map note position to canvas (WEBGL: 0,0 is center)
       const totalDuration = notes[notes.length - 1].start_time + notes[notes.length - 1].duration;
-      const baseX = 50 + (note.start_time / totalDuration) * (width - 100);
-      const baseY = height / 2 + (60 - note.pitch) * 10;
+      const baseX = -width/2 + 50 + (note.start_time / totalDuration) * (width - 100);
+      const baseY = (60 - note.pitch) * 10;
 
       // Add variation to position for multiple strokes
       const variation = 40 + (note.velocity_value || 0.5) * 60;
