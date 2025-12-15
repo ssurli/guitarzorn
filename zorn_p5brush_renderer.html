@@ -84,6 +84,7 @@
 
   <div class="controls">
     <button onclick="loadNotesAndPaint()">🎨 Load Notes & Paint</button>
+    <button id="playBtn" onclick="playWithAudio()" disabled>▶ Play with Audio</button>
     <button onclick="clearPainting()">🧹 Clear Canvas</button>
 
     <br><br>
@@ -118,12 +119,20 @@
 
   <div id="canvasContainer"></div>
 
+  <!-- Audio element for synchronized playback -->
+  <audio id="audioPlayer" preload="auto" style="display: none;">
+    <source src="1207(1)_audio.wav" type="audio/wav">
+    Your browser does not support the audio element.
+  </audio>
+
   <script>
     // Global variables
     let notes = [];
     let painting = false;
+    let paintingWithAudio = false;
     let currentNoteIndex = 0;
     let currentStrokeIndex = 0;
+    let audioElement = null;
 
     // Density settings
     let strokesPerNote = 20;
@@ -159,8 +168,31 @@
     }
 
     function draw() {
-      // Auto-paint notes with multiple strokes per note
-      if (painting && currentNoteIndex < notes.length) {
+      // Audio-synchronized painting
+      if (paintingWithAudio && audioElement && !audioElement.paused) {
+        const currentTime = audioElement.currentTime;
+
+        // Paint notes based on audio time
+        for (let i = 0; i < notes.length; i++) {
+          const note = notes[i];
+          if (note.start_time <= currentTime && note.start_time + note.duration >= currentTime) {
+            // Paint this note (fewer strokes for real-time)
+            paintNoteStroke(note, i, frameCount % 3);
+          }
+        }
+
+        // Update progress
+        let notesPlayed = notes.filter(n => n.start_time <= currentTime).length;
+        document.getElementById('progress').textContent = notesPlayed;
+
+        // Check if audio finished
+        if (audioElement.ended) {
+          paintingWithAudio = false;
+          console.log('✅ Audio playback complete!');
+        }
+      }
+      // Auto-paint notes with multiple strokes per note (non-audio mode)
+      else if (painting && currentNoteIndex < notes.length) {
         const note = notes[currentNoteIndex];
 
         // Paint multiple strokes for this note
@@ -409,6 +441,9 @@
         document.getElementById('progress').textContent = 0;
         updateSliders();
 
+        // Enable play button
+        document.getElementById('playBtn').disabled = false;
+
         // Reset
         currentNoteIndex = 0;
         currentStrokeIndex = 0;
@@ -425,14 +460,65 @@
     }
 
     //
+    // Play with audio synchronization
+    //
+    async function playWithAudio() {
+      if (notes.length === 0) {
+        alert('Carica prima le note con "Load Notes & Paint"!');
+        return;
+      }
+
+      // Stop regular painting mode
+      painting = false;
+
+      // Reset canvas
+      background(CANVAS_BASE);
+
+      // Get audio element
+      audioElement = document.getElementById('audioPlayer');
+
+      try {
+        // Reset audio and start from beginning
+        audioElement.currentTime = 0;
+        await audioElement.play();
+
+        // Enable audio-synchronized painting
+        paintingWithAudio = true;
+
+        console.log('🎵 Playing with audio synchronization');
+        document.getElementById('playBtn').disabled = true;
+
+        // Re-enable button when audio ends
+        audioElement.onended = () => {
+          document.getElementById('playBtn').disabled = false;
+          console.log('✅ Playback finished');
+        };
+
+      } catch (error) {
+        console.error('❌ Error playing audio:', error);
+        alert('Errore nel playback audio! Verifica che 1207(1)_audio.wav esista.');
+        paintingWithAudio = false;
+      }
+    }
+
+    //
     // Clear painting
     //
     function clearPainting() {
       background(CANVAS_BASE);
       painting = false;
+      paintingWithAudio = false;
       currentNoteIndex = 0;
       currentStrokeIndex = 0;
       document.getElementById('progress').textContent = 0;
+
+      // Stop audio if playing
+      if (audioElement && !audioElement.paused) {
+        audioElement.pause();
+        audioElement.currentTime = 0;
+        document.getElementById('playBtn').disabled = false;
+      }
+
       console.log('🧹 Canvas cleared');
     }
 
