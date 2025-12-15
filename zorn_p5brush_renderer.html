@@ -160,14 +160,13 @@
       const cnv = createCanvas(1200, 600);
       cnv.parent('canvasContainer');
 
-      // Initialize p5.brush
-      brush.instance(this);
-
       // Setup canvas
       background(CANVAS_BASE);
 
+      // p5.brush is available globally after library load
       console.log('✅ p5.brush canvas ready');
       console.log('📚 p5.brush version loaded');
+      console.log('brush object:', typeof brush);
     }
 
     function draw() {
