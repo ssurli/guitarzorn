@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>Zorn Oil Painting - Intelligent Traces</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.2/p5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5.brush@0.12.1"></script>
   <style>
     body {
       margin: 0;
@@ -104,6 +105,7 @@
     let isPainting = false;
     let audio;
     let frameCounter = 0;
+    let brushReady = false;
 
     function preload() {
       img = loadImage('zorn_pentatonic_pure_musical.png');
@@ -118,16 +120,17 @@
       createCanvas(imgW, imgH).parent('canvasContainer');
       pixelDensity(1);  // Migliora performance per readback operations
 
-      // Ottimizza getImageData per letture frequenti
-      const ctx = drawingContext;
-      if (ctx && ctx.canvas) {
-        const oldCanvas = ctx.canvas;
-        const newCanvas = document.createElement('canvas');
-        newCanvas.width = oldCanvas.width;
-        newCanvas.height = oldCanvas.height;
-        const newCtx = newCanvas.getContext('2d', { willReadFrequently: true });
-        // Non possiamo cambiare il context esistente, ma la flag pixelDensity(1) aiuta
-      }
+      // Inizializza p5.brush per effetti pittorici realistici
+      brush.load();
+
+      // Configura bleed e texture per effetto oil painting
+      brush.bleed(0.3, "out");  // Sanguinamento verso esterno
+      brush.fillTexture(0.6, 0.8);  // Texture pittorica
+
+      // Usa brush tipo "marker2" per pennellate più pittoriche
+      brush.field("seabed");  // Flow field organico
+
+      brushReady = true;
 
       img.loadPixels();
 
@@ -689,8 +692,38 @@
 
       paintOnScreen(cols) {
         if (this.posHistory.length === this.posForAvg) {
-          for (let b = 0; b < this.nBristles; b++) {
-            this.bristles[b].paintOnScreen(cols[b]);
+          // Usa p5.brush con bleed e texture invece del sistema bristle custom
+          if (brushReady && cols && cols.length > 0) {
+            // Calcola colore medio per questa posizione
+            let rAvg = 0, gAvg = 0, bAvg = 0, aAvg = 0;
+            for (let b = 0; b < this.nBristles; b++) {
+              rAvg += red(cols[b]);
+              gAvg += green(cols[b]);
+              bAvg += blue(cols[b]);
+              aAvg += alpha(cols[b]);
+            }
+            rAvg /= this.nBristles;
+            gAvg /= this.nBristles;
+            bAvg /= this.nBristles;
+            aAvg /= this.nBristles;
+
+            // Disegna con p5.brush per bleed e texture
+            const col = color(rAvg, gAvg, bAvg, aAvg);
+            const weight = this.nBristles * 0.5;  // Peso basato sul numero di bristles
+
+            brush.set("marker2", col, weight);
+
+            // Disegna pennellata seguendo le posizioni
+            if (this.posHistory.length >= 2) {
+              const p1 = this.posHistory[this.posHistory.length - 2];
+              const p2 = this.posHistory[this.posHistory.length - 1];
+              brush.line(p1.x, p1.y, p2.x, p2.y);
+            }
+          } else {
+            // Fallback al sistema bristle originale se p5.brush non è pronto
+            for (let b = 0; b < this.nBristles; b++) {
+              this.bristles[b].paintOnScreen(cols[b]);
+            }
           }
         }
       }
