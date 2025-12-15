@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Zorn Pentatonic - Painterly from Image</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.2/p5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5.brush"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: 'Monaco', 'Courier New', monospace;
+      background: #1a1a1a;
+      color: #f0f0f0;
+    }
+    h1 {
+      text-align: center;
+      color: #ff6b35;
+    }
+    .controls {
+      text-align: center;
+      margin: 20px;
+      padding: 20px;
+      background: #2a2a2a;
+      border-radius: 8px;
+    }
+    button {
+      padding: 12px 24px;
+      font-size: 16px;
+      margin: 5px;
+      cursor: pointer;
+      background: #ff6b35;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-family: inherit;
+    }
+    button:hover {
+      background: #ff8555;
+    }
+    button:disabled {
+      background: #666;
+      cursor: not-allowed;
+    }
+    #canvasContainer {
+      text-align: center;
+      margin-top: 20px;
+    }
+    .slider-container {
+      margin: 15px 0;
+      display: inline-block;
+      width: 300px;
+    }
+    .slider-container label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: bold;
+    }
+    input[type="range"] {
+      width: 100%;
+      cursor: pointer;
+    }
+    .info {
+      color: #aaa;
+      font-size: 12px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎨 Zorn Pentatonic - Painterly from Image (Live)</h1>
+
+  <div class="controls">
+    <button id="playBtn" onclick="startPainterly()">▶ Start Painterly Effect with Audio</button>
+    <button onclick="clearCanvas()">🧹 Clear Canvas</button>
+
+    <br><br>
+
+    <div class="slider-container">
+      <label>Brush Density: <span id="densityValue">5000</span> strokes</label>
+      <input type="range" id="densitySlider" min="1000" max="20000" value="5000" step="500" oninput="updateDensity()">
+    </div>
+
+    <div class="slider-container">
+      <label>Brush Size: <span id="brushSizeValue">15</span>px</label>
+      <input type="range" id="brushSizeSlider" min="5" max="40" value="15" step="1" oninput="updateBrushSize()">
+    </div>
+
+    <br>
+    <div class="info">
+      Progress: <span id="progress">0</span>% |
+      Image: zorn_pentatonic_pure_musical.png
+    </div>
+  </div>
+
+  <div id="canvasContainer"></div>
+
+  <audio id="audioPlayer" preload="auto" style="display: none;">
+    <source src="1207(1)_audio.wav" type="audio/wav">
+  </audio>
+
+  <script>
+    let sourceImage;
+    let painting = false;
+    let audioElement;
+    let brushReady = false;
+
+    // Painterly parameters
+    let totalStrokes = 5000;
+    let currentStroke = 0;
+    let brushSize = 15;
+    let strokesPerFrame = 50;
+
+    function preload() {
+      sourceImage = loadImage('zorn_pentatonic_pure_musical.png');
+    }
+
+    function setup() {
+      const cnv = createCanvas(sourceImage.width, sourceImage.height, WEBGL);
+      cnv.parent('canvasContainer');
+
+      // Load p5.brush
+      brush.load();
+      brush.field("seabed");
+      brush.scale(1.2);
+      brushReady = true;
+
+      // Setup canvas with base color
+      background(242, 235, 220);
+
+      console.log('✅ Ready to paint from image');
+      console.log(`📐 Canvas size: ${sourceImage.width}x${sourceImage.height}`);
+    }
+
+    function draw() {
+      if (!brushReady || !painting) return;
+
+      translate(-width/2, -height/2);
+
+      // Paint multiple strokes per frame
+      for (let i = 0; i < strokesPerFrame && currentStroke < totalStrokes; i++) {
+        paintStrokeFromImage();
+        currentStroke++;
+      }
+
+      // Update progress
+      const progress = Math.round((currentStroke / totalStrokes) * 100);
+      document.getElementById('progress').textContent = progress;
+
+      // Stop when done
+      if (currentStroke >= totalStrokes) {
+        painting = false;
+        console.log('✅ Painterly effect complete!');
+      }
+    }
+
+    function paintStrokeFromImage() {
+      // Random position weighted by brightness (more strokes in darker areas)
+      let x, y, brightness;
+      let attempts = 0;
+
+      do {
+        x = Math.floor(random(sourceImage.width));
+        y = Math.floor(random(sourceImage.height));
+
+        // Sample pixel
+        const px = sourceImage.get(x, y);
+        brightness = (px[0] + px[1] + px[2]) / 3;
+
+        attempts++;
+      } while (brightness > 240 && attempts < 5); // Avoid very bright areas
+
+      // Get color from sampled position
+      const sampledColor = sourceImage.get(x, y);
+      const col = color(sampledColor[0], sampledColor[1], sampledColor[2]);
+
+      // Sample nearby area for stroke direction
+      const sampleRadius = 20;
+      const x2 = constrain(x + random(-sampleRadius, sampleRadius), 0, sourceImage.width - 1);
+      const y2 = constrain(y + random(-sampleRadius, sampleRadius), 0, sourceImage.height - 1);
+
+      const color2 = sourceImage.get(x2, y2);
+      const brightness2 = (color2[0] + color2[1] + color2[2]) / 3;
+
+      // Stroke direction follows brightness gradient
+      const angle = atan2(y2 - y, x2 - x);
+
+      // Vary brush type based on brightness
+      let brushType;
+      if (brightness < 80) {
+        brushType = '2B'; // Dark areas: soft pencil
+      } else if (brightness < 160) {
+        brushType = 'marker'; // Mid tones: marker
+      } else {
+        brushType = 'charcoal'; // Light areas: charcoal
+      }
+
+      // Set brush with sampled color
+      brush.set(brushType, col, random(2, 4));
+
+      // Paint stroke
+      const strokeLength = brushSize * random(0.8, 1.5);
+      const x1 = x + cos(angle) * strokeLength / 2;
+      const y1 = y + sin(angle) * strokeLength / 2;
+      const x2Stroke = x - cos(angle) * strokeLength / 2;
+      const y2Stroke = y - sin(angle) * strokeLength / 2;
+
+      brush.line(x1, y1, x2Stroke, y2Stroke);
+    }
+
+    async function startPainterly() {
+      if (painting) return;
+
+      // Reset
+      currentStroke = 0;
+      background(242, 235, 220);
+
+      // Start painting
+      painting = true;
+
+      // Start audio
+      audioElement = document.getElementById('audioPlayer');
+      try {
+        audioElement.currentTime = 0;
+        await audioElement.play();
+        console.log('🎵 Audio playing');
+
+        audioElement.onended = () => {
+          console.log('🎵 Audio finished');
+        };
+      } catch (error) {
+        console.warn('⚠️ Audio playback failed:', error);
+      }
+
+      document.getElementById('playBtn').disabled = true;
+
+      console.log(`🎨 Starting painterly effect: ${totalStrokes} strokes`);
+    }
+
+    function clearCanvas() {
+      background(242, 235, 220);
+      painting = false;
+      currentStroke = 0;
+      document.getElementById('progress').textContent = '0';
+      document.getElementById('playBtn').disabled = false;
+
+      if (audioElement && !audioElement.paused) {
+        audioElement.pause();
+        audioElement.currentTime = 0;
+      }
+    }
+
+    function updateDensity() {
+      totalStrokes = parseInt(document.getElementById('densitySlider').value);
+      document.getElementById('densityValue').textContent = totalStrokes;
+    }
+
+    function updateBrushSize() {
+      brushSize = parseInt(document.getElementById('brushSizeSlider').value);
+      document.getElementById('brushSizeValue').textContent = brushSize;
+    }
+  </script>
+</body>
+</html>
