@@ -136,12 +136,23 @@
       background(bgColor);
 
       const nPx = imgW * imgH;
+      nBadPx = 0;
+
       for (let i = 0; i < nPx; i++) {
         similarColorPx[i] = false;
         visitedPx[i] = false;
-        badPaintedPx[i] = i;
+
+        // Solo pixel NON BIANCHI (simboli) sono da dipingere
+        const iPx = 4 * i;
+        const r = img.pixels[iPx], g = img.pixels[iPx + 1], b = img.pixels[iPx + 2];
+        const brightness = (r + g + b) / 3;
+
+        if (brightness < 250) {  // Pixel colorato (non bianco) = simbolo da dipingere
+          badPaintedPx[nBadPx++] = i;
+        }
       }
-      nBadPx = nPx;
+
+      console.log('🎨 Pixel con simboli da dipingere:', nBadPx, 'su', nPx);
 
       avgBrushSize = max(SMALLER_BRUSH, max(imgW, imgH) / 20);  // Ridotto per pennellate più piccole
 
@@ -244,6 +255,11 @@
           const iPx = 4 * px;
           const cPx = 4 * (x + y * width);
 
+          // Controlla se il pixel ORIGINALE è un simbolo (non bianco)
+          const rImg = img.pixels[iPx], gImg = img.pixels[iPx + 1], bImg = img.pixels[iPx + 2];
+          const brightnessImg = (rImg + gImg + bImg) / 3;
+          const isSymbol = brightnessImg < 250;
+
           const rP = pixels[cPx], gP = pixels[cPx + 1], bP = pixels[cPx + 2];
           let well = false;
 
@@ -254,7 +270,11 @@
           }
 
           similarColorPx[px] = well;
-          if (!well) badPaintedPx[nBadPx++] = px;
+
+          // Aggiungi come "bad" SOLO se è un simbolo E mal dipinto
+          if (isSymbol && !well) {
+            badPaintedPx[nBadPx++] = px;
+          }
         }
       }
       updatePixels();
@@ -299,12 +319,22 @@
       noLoop();
 
       const nPx = imgW * imgH;
+      nBadPx = 0;
+
       for (let i = 0; i < nPx; i++) {
         similarColorPx[i] = false;
         visitedPx[i] = false;
-        badPaintedPx[i] = i;
+
+        // Solo pixel NON BIANCHI (simboli) sono da dipingere
+        const iPx = 4 * i;
+        const r = img.pixels[iPx], g = img.pixels[iPx + 1], b = img.pixels[iPx + 2];
+        const brightness = (r + g + b) / 3;
+
+        if (brightness < 250) {  // Pixel colorato (non bianco) = simbolo da dipingere
+          badPaintedPx[nBadPx++] = i;
+        }
       }
-      nBadPx = nPx;
+
       avgBrushSize = max(SMALLER_BRUSH, max(imgW, imgH) / 20);  // Ridotto per pennellate più piccole
       trace = undefined;
       nTraces = 0;
