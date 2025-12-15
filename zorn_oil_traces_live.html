@@ -106,6 +106,8 @@
     let audio;
     let frameCounter = 0;
     let brushReady = false;
+    let edgePixels = [];  // Pixel che sono bordi (per Canny edge detection)
+    let nEdgePixels = 0;
 
     function preload() {
       img = loadImage('zorn_pentatonic_pure_musical.png');
@@ -161,6 +163,10 @@
       }
 
       console.log('🎨 Pixel con simboli da dipingere:', nBadPx, 'su', nPx);
+
+      // Rileva bordi (Canny-like edge detection)
+      detectEdges();
+      console.log('🔍 Edge pixels rilevati:', nEdgePixels);
 
       avgBrushSize = max(SMALLER_BRUSH, max(imgW, imgH) / 20);  // Ridotto per pennellate più piccole
 
@@ -228,7 +234,15 @@
         let t;
 
         while (!validTraj && invalidTraj % 500 !== 499) {
-          const px = badPaintedPx[floor(random(nBadPx))];
+          let px;
+
+          // 70% delle volte parte dai bordi, 30% dai bad pixels
+          if (nEdgePixels > 0 && random() < 0.7) {
+            px = edgePixels[floor(random(nEdgePixels))];
+          } else {
+            px = badPaintedPx[floor(random(nBadPx))];
+          }
+
           const startPos = createVector(px % imgW, floor(px / imgW));
           t = new Trace(startPos, nSteps, TRACE_SPEED, img);  // Passo img
           validTraj = t.hasValidTrajectory(similarColorPx, visitedPx, img);
@@ -348,6 +362,9 @@
       nTraces = 0;
       frameCounter = 0;
 
+      // Ri-rileva bordi
+      detectEdges();
+
       if (audio && !audio.paused) {
         audio.pause();
         audio.currentTime = 0;
@@ -357,10 +374,43 @@
       updateUI();
     }
 
+    // Rileva bordi dei simboli con Sobel edge detection
+    function detectEdges() {
+      nEdgePixels = 0;
+      const threshold = 30;  // Soglia per considerare un pixel come bordo
+
+      for (let x = 1; x < imgW - 1; x++) {
+        for (let y = 1; y < imgH - 1; y++) {
+          const getBrightness = (px, py) => {
+            const idx = 4 * (px + py * imgW);
+            return (img.pixels[idx] + img.pixels[idx + 1] + img.pixels[idx + 2]) / 3;
+          };
+
+          // Sobel gradient
+          const gradX =
+            (-1 * getBrightness(x-1, y-1) + 1 * getBrightness(x+1, y-1)) +
+            (-2 * getBrightness(x-1, y) + 2 * getBrightness(x+1, y)) +
+            (-1 * getBrightness(x-1, y+1) + 1 * getBrightness(x+1, y+1));
+
+          const gradY =
+            (-1 * getBrightness(x-1, y-1) - 2 * getBrightness(x, y-1) - 1 * getBrightness(x+1, y-1)) +
+            (1 * getBrightness(x-1, y+1) + 2 * getBrightness(x, y+1) + 1 * getBrightness(x+1, y+1));
+
+          const gradMagnitude = sqrt(gradX * gradX + gradY * gradY);
+
+          // Se la magnitudine è alta, è un bordo
+          if (gradMagnitude > threshold) {
+            const px = x + y * imgW;
+            edgePixels[nEdgePixels++] = px;
+          }
+        }
+      }
+    }
+
     function updateUI() {
       document.getElementById('traces').textContent = nTraces;
       document.getElementById('brush').textContent = round(avgBrushSize);
-      document.getElementById('bad').textContent = nBadPx;
+      document.getElementById('bad').textContent = nEdgePixels > 0 ? nEdgePixels : nBadPx;
     }
 
     // TRACE CLASS
