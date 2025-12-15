@@ -135,15 +135,15 @@
     let audioElement = null;
     let brushReady = false;  // Flag to check if brush is loaded
 
-    // Density settings
-    let strokesPerNote = 20;
-    let brushWeight = 3;
+    // Density settings (defaults to medium preset)
+    let strokesPerNote = 40;
+    let brushWeight = 4;
 
     const DENSITY_PRESETS = {
-      low: { strokes: 8, weight: 2 },
-      medium: { strokes: 20, weight: 3 },
-      high: { strokes: 60, weight: 4 },
-      ultra: { strokes: 120, weight: 5 }
+      low: { strokes: 15, weight: 3 },
+      medium: { strokes: 40, weight: 4 },
+      high: { strokes: 80, weight: 5 },
+      ultra: { strokes: 150, weight: 6 }
     };
 
     // Zorn Palette
@@ -166,6 +166,13 @@
 
       // Load p5.brush and set flag when ready
       brush.load();
+
+      // Add flow field for organic, painterly strokes
+      brush.field("seabed");
+
+      // Scale up for more visible brushstrokes
+      brush.scale(1.5);
+
       brushReady = true;
 
       console.log('✅ p5.brush canvas ready (WEBGL mode)');
@@ -277,12 +284,12 @@
     // Oil brush stroke using p5.brush (using '2B' soft pencil)
     //
     function drawOilBrushStroke(x, y, size, col) {
-      // Set brush type, color, and weight in one call
-      brush.set('2B', col, brushWeight);
+      // Set brush type, color, and weight - thicker for oil painting effect
+      brush.set('2B', col, brushWeight * 1.5);
 
-      // Random directional stroke
+      // Longer, more expressive strokes for oil painting look
       const angle = random(TWO_PI);
-      const length = size * random(0.8, 1.5);
+      const length = size * random(1.2, 2.5);
 
       const x2 = x + cos(angle) * length;
       const y2 = y + sin(angle) * length;
