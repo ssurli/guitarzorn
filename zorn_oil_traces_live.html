@@ -103,6 +103,7 @@
     let nTraces = 0;
     let isPainting = false;
     let audio;
+    let frameCounter = 0;
 
     function preload() {
       img = loadImage('zorn_pentatonic_pure_musical.png');
@@ -116,6 +117,18 @@
 
       createCanvas(imgW, imgH).parent('canvasContainer');
       pixelDensity(1);  // Migliora performance per readback operations
+
+      // Ottimizza getImageData per letture frequenti
+      const ctx = drawingContext;
+      if (ctx && ctx.canvas) {
+        const oldCanvas = ctx.canvas;
+        const newCanvas = document.createElement('canvas');
+        newCanvas.width = oldCanvas.width;
+        newCanvas.height = oldCanvas.height;
+        const newCtx = newCanvas.getContext('2d', { willReadFrequently: true });
+        // Non possiamo cambiare il context esistente, ma la flag pixelDensity(1) aiuta
+      }
+
       img.loadPixels();
 
       bgColor = color(255);
@@ -162,7 +175,12 @@
 
       trace.paint(visitedPx, imgW, imgH);
       trace = undefined;
-      updatePixelArrays();
+
+      // Aggiorna pixel arrays solo ogni 5 frames per performance
+      frameCounter++;
+      if (frameCounter % 5 === 0) {
+        updatePixelArrays();
+      }
       updateUI();
     }
 
@@ -290,6 +308,7 @@
       avgBrushSize = max(SMALLER_BRUSH, max(imgW, imgH) / 20);  // Ridotto per pennellate più piccole
       trace = undefined;
       nTraces = 0;
+      frameCounter = 0;
 
       if (audio && !audio.paused) {
         audio.pause();
