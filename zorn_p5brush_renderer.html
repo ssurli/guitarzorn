@@ -157,7 +157,7 @@
 
     // p5.js sketch
     function setup() {
-      const cnv = createCanvas(1200, 600, WEBGL);
+      const cnv = createCanvas(1200, 600);  // 2D mode for p5.brush
       cnv.parent('canvasContainer');
 
       // Load p5.brush
@@ -166,7 +166,7 @@
       // Setup canvas
       background(CANVAS_BASE);
 
-      console.log('✅ p5.brush canvas ready with WEBGL');
+      console.log('✅ p5.brush canvas ready (2D mode)');
       console.log('📚 Available brushes:', brush.box());
     }
 
@@ -223,10 +223,10 @@
     // Paint a single stroke for a note using p5.brush
     //
     function paintNoteStroke(note, noteIndex, strokeIndex) {
-      // Map note position to canvas (WEBGL coordinates: center is 0,0)
+      // Map note position to canvas (2D mode: 0,0 is top-left)
       const totalDuration = notes[notes.length - 1].start_time + notes[notes.length - 1].duration;
-      const baseX = -width/2 + 50 + (note.start_time / totalDuration) * (width - 100);
-      const baseY = (60 - note.pitch) * 10;
+      const baseX = 50 + (note.start_time / totalDuration) * (width - 100);
+      const baseY = height / 2 + (60 - note.pitch) * 10;
 
       // Add variation to position for multiple strokes
       const variation = 40 + (note.velocity_value || 0.5) * 60;
