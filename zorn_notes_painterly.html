@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Zorn Notes → Painterly Brushstrokes</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.2/p5.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/p5.brush@0.12.1"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: 'Monaco', 'Courier New', monospace;
+      background: #1a1a1a;
+      color: #f0f0f0;
+    }
+    h1 {
+      text-align: center;
+      color: #ff6b35;
+      font-size: 24px;
+    }
+    .controls {
+      text-align: center;
+      margin: 20px auto;
+      padding: 20px;
+      background: #2a2a2a;
+      border-radius: 8px;
+      max-width: 900px;
+    }
+    button {
+      padding: 12px 24px;
+      font-size: 16px;
+      margin: 5px;
+      cursor: pointer;
+      background: #ff6b35;
+      color: white;
+      border: none;
+      border-radius: 4px;
+    }
+    button:hover {
+      background: #ff8555;
+    }
+    button:disabled {
+      background: #666;
+      cursor: not-allowed;
+    }
+    #canvasContainer {
+      text-align: center;
+      margin-top: 20px;
+    }
+    .info {
+      color: #aaa;
+      font-size: 13px;
+      margin-top: 15px;
+      line-height: 1.8;
+    }
+    .info strong {
+      color: #ff6b35;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎨 Zorn Pentatonic - Note Musicali → Pennellate Pittoriche</h1>
+
+  <div class="controls">
+    <button id="startBtn" onclick="startPainting()">▶ Start Painting with Audio</button>
+    <button onclick="pausePainting()">⏸ Pause</button>
+    <button onclick="clearCanvas()">🧹 Clear & Restart</button>
+
+    <div class="info">
+      <strong>Note dipinte:</strong> <span id="noteCount">0</span> / <span id="totalNotes">--</span> |
+      <strong>Tempo:</strong> <span id="currentTime">0.0</span>s<br>
+      <small>Traslitterazione: Note musicali → Pennellate espressive (Zorn palette)</small>
+    </div>
+  </div>
+
+  <div id="canvasContainer"></div>
+
+  <audio id="audio" preload="auto" style="display:none">
+    <source src="1207(1)_audio.wav" type="audio/wav">
+  </audio>
+
+  <script>
+    // Zorn Palette
+    const ZORN_COLORS = {
+      yellow: [227, 168, 87],   // Yellow Ochre
+      red: [193, 39, 45],        // Vermilion
+      black: [41, 36, 33],       // Ivory Black
+      white: [250, 247, 241]     // Titanium White
+    };
+
+    let notes = [];
+    let audio;
+    let isPainting = false;
+    let currentNoteIndex = 0;
+    let paintedNotes = 0;
+    let brushReady = false;
+    let canvasWidth = 1400;
+    let canvasHeight = 800;
+
+    // Pitch range per mappare le note sulla tela
+    let minPitch = 999, maxPitch = 0;
+
+    function preload() {
+      notes = loadJSON('1207(1)_notes.json');
+    }
+
+    function setup() {
+      createCanvas(canvasWidth, canvasHeight).parent('canvasContainer');
+      pixelDensity(1);
+
+      // Inizializza p5.brush
+      setTimeout(() => {
+        if (typeof brush !== 'undefined') {
+          brush.bleed(0.4, "out");
+          brush.fillTexture(0.7, 0.9);
+          brush.field("seabed");
+          brushReady = true;
+          console.log('✓ p5.brush ready');
+        }
+      }, 100);
+
+      background(255);
+      strokeCap(ROUND);
+
+      // Trova range di pitch per mappatura
+      for (let note of notes) {
+        if (note.pitch < minPitch) minPitch = note.pitch;
+        if (note.pitch > maxPitch) maxPitch = note.pitch;
+      }
+
+      document.getElementById('totalNotes').textContent = notes.length;
+
+      console.log('🎵 Note caricate:', notes.length);
+      console.log('📊 Pitch range:', minPitch, '-', maxPitch);
+
+      noLoop();
+    }
+
+    function draw() {
+      if (!isPainting || !audio) return;
+
+      const currentTime = audio.currentTime;
+      document.getElementById('currentTime').textContent = currentTime.toFixed(1);
+
+      // Disegna tutte le note il cui start_time è passato e non sono ancora dipinte
+      while (currentNoteIndex < notes.length) {
+        const note = notes[currentNoteIndex];
+
+        if (note.start_time <= currentTime) {
+          // Disegna pennellata per questa nota
+          paintNote(note, currentNoteIndex);
+          currentNoteIndex++;
+          paintedNotes++;
+          document.getElementById('noteCount').textContent = paintedNotes;
+        } else {
+          break;  // Note future non ancora da dipingere
+        }
+      }
+
+      // Ferma quando audio finito
+      if (audio.ended || currentNoteIndex >= notes.length) {
+        isPainting = false;
+        noLoop();
+        console.log('🎨 Painting complete!');
+        document.getElementById('startBtn').disabled = false;
+      }
+    }
+
+    function paintNote(note, index) {
+      // Mappatura proprietà nota → parametri pennellata
+
+      // 1. Posizione Y: pitch (nota più alta = più in alto)
+      const y = map(note.pitch, minPitch, maxPitch, canvasHeight - 100, 100);
+
+      // 2. Posizione X: progresso temporale con variazione
+      const baseX = map(note.start_time, 0, notes[notes.length - 1].start_time + 2, 50, canvasWidth - 50);
+      const x = baseX + random(-30, 30);  // Variazione per effetto pittorico
+
+      // 3. Lunghezza: duration (nota più lunga = pennellata più lunga)
+      const strokeLength = map(note.duration, 0, 2, 40, 200);
+
+      // 4. Spessore: velocity (dinamica forte = pennellata più spessa)
+      const strokeWeight = map(note.velocity_value, 0.3, 0.7, 5, 25);
+
+      // 5. Angolo: tension (tensione alta = pennellata più verticale/energica)
+      const baseAngle = map(note.tension, 0, 1, -0.3, 0.3);
+      const angle = baseAngle + random(-0.2, 0.2);
+
+      // 6. Colore: mappa pitch alla Zorn palette
+      const col = getPitchColor(note.pitch, note.velocity_value);
+
+      // Calcola endpoint della pennellata
+      const x2 = x + strokeLength * cos(angle);
+      const y2 = y + strokeLength * sin(angle);
+
+      // Disegna con p5.brush se disponibile
+      if (brushReady) {
+        // Scelta brush type basata su technique
+        const brushType = note.technique === "bend" ? "spray" : "marker2";
+        brush.set(brushType, color(...col, 200), strokeWeight);
+        brush.line(x, y, x2, y2);
+
+        // Aggiungi texturing con pennellate secondarie
+        if (note.velocity_value > 0.5) {
+          brush.set("charcoal", color(...col, 80), strokeWeight * 0.3);
+          brush.line(x + random(-5, 5), y + random(-5, 5), x2 + random(-5, 5), y2 + random(-5, 5));
+        }
+      } else {
+        // Fallback senza p5.brush
+        stroke(...col, 200);
+        strokeWeight(strokeWeight);
+        line(x, y, x2, y2);
+      }
+
+      console.log(`🎵 Painted note ${index}: ${note.note} (pitch ${note.pitch}) at ${note.start_time.toFixed(2)}s`);
+    }
+
+    function getPitchColor(pitch, velocity) {
+      // Mappa pitch a Zorn palette con transizioni
+      const normalizedPitch = map(pitch, minPitch, maxPitch, 0, 1);
+
+      let col;
+      if (normalizedPitch < 0.25) {
+        // Basse: Black → Red
+        col = lerpColorArray(ZORN_COLORS.black, ZORN_COLORS.red, normalizedPitch * 4);
+      } else if (normalizedPitch < 0.5) {
+        // Medio-basse: Red → Yellow
+        col = lerpColorArray(ZORN_COLORS.red, ZORN_COLORS.yellow, (normalizedPitch - 0.25) * 4);
+      } else if (normalizedPitch < 0.75) {
+        // Medio-alte: Yellow → mix with white
+        col = lerpColorArray(ZORN_COLORS.yellow, ZORN_COLORS.white, (normalizedPitch - 0.5) * 4);
+      } else {
+        // Alte: più white
+        col = lerpColorArray(ZORN_COLORS.yellow, ZORN_COLORS.white, (normalizedPitch - 0.75) * 4);
+      }
+
+      // Modulazione con velocity (dinamica forte = colore più saturo)
+      const saturation = map(velocity, 0.3, 0.7, 0.7, 1.0);
+      col = col.map(c => c * saturation);
+
+      return col;
+    }
+
+    function lerpColorArray(col1, col2, amt) {
+      return [
+        lerp(col1[0], col2[0], amt),
+        lerp(col1[1], col2[1], amt),
+        lerp(col1[2], col2[2], amt)
+      ];
+    }
+
+    async function startPainting() {
+      if (isPainting) return;
+
+      currentNoteIndex = 0;
+      paintedNotes = 0;
+      isPainting = true;
+
+      audio = document.getElementById('audio');
+      try {
+        audio.currentTime = 0;
+        await audio.play();
+        console.log('🎵 Audio playing');
+
+        loop();  // Avvia draw loop
+
+        audio.onended = () => {
+          isPainting = false;
+          noLoop();
+          console.log('🎵 Audio terminato');
+          document.getElementById('startBtn').disabled = false;
+        };
+      } catch(e) {
+        console.warn('⚠️ Audio failed:', e);
+      }
+
+      document.getElementById('startBtn').disabled = true;
+    }
+
+    function pausePainting() {
+      isPainting = false;
+      noLoop();
+      if (audio && !audio.paused) audio.pause();
+      document.getElementById('startBtn').disabled = false;
+    }
+
+    function clearCanvas() {
+      background(255);
+      currentNoteIndex = 0;
+      paintedNotes = 0;
+      isPainting = false;
+      noLoop();
+
+      if (audio && !audio.paused) {
+        audio.pause();
+        audio.currentTime = 0;
+      }
+
+      document.getElementById('noteCount').textContent = 0;
+      document.getElementById('currentTime').textContent = '0.0';
+      document.getElementById('startBtn').disabled = false;
+    }
+  </script>
+</body>
+</html>
