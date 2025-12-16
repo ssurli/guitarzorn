@@ -192,7 +192,7 @@
       const strokeLength = map(note.duration, 0, 2, 40, 200);
 
       // 4. Spessore: velocity (dinamica forte = pennellata più spessa)
-      const strokeWeight = map(note.velocity_value, 0.3, 0.7, 5, 25);
+      const brushWeight = map(note.velocity_value, 0.3, 0.7, 5, 25);
 
       // 5. Angolo: tension (tensione alta = pennellata più verticale/energica)
       const baseAngle = map(note.tension, 0, 1, -0.3, 0.3);
@@ -209,18 +209,18 @@
       if (brushReady) {
         // Scelta brush type basata su technique
         const brushType = note.technique === "bend" ? "spray" : "marker2";
-        brush.set(brushType, color(...col, 200), strokeWeight);
+        brush.set(brushType, color(...col, 200), brushWeight);
         brush.line(x, y, x2, y2);
 
         // Aggiungi texturing con pennellate secondarie
         if (note.velocity_value > 0.5) {
-          brush.set("charcoal", color(...col, 80), strokeWeight * 0.3);
+          brush.set("charcoal", color(...col, 80), brushWeight * 0.3);
           brush.line(x + random(-5, 5), y + random(-5, 5), x2 + random(-5, 5), y2 + random(-5, 5));
         }
       } else {
         // Fallback senza p5.brush
         stroke(...col, 200);
-        strokeWeight(strokeWeight);
+        strokeWeight(brushWeight);
         line(x, y, x2, y2);
       }
 
