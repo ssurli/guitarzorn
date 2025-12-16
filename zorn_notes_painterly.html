@@ -122,9 +122,14 @@
       background(255);
       strokeCap(ROUND);
 
-      // Verifica che notes sia caricato correttamente
-      if (!notesData || !Array.isArray(notesData)) {
-        console.error('❌ Errore caricamento notes:', notesData);
+      // Converti l'oggetto in array se necessario
+      if (notesData && !Array.isArray(notesData)) {
+        notesData = Object.values(notesData);
+        console.log('🔄 Convertito oggetto in array');
+      }
+
+      if (!notesData || notesData.length === 0) {
+        console.error('❌ Errore caricamento notes');
         return;
       }
 
