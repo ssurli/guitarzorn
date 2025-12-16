@@ -157,17 +157,15 @@
 
     // PRE-PAINTING: sporca il canvas prima di iniziare
     function seedCanvas() {
-      if (!brushReady) {
-        console.warn('⚠️ brush not ready for seedCanvas');
-        return;
-      }
-
       background(248);
+
+      const hasBrush = (typeof brush !== 'undefined');
+      console.log(`🎨 seedCanvas: brush=${hasBrush}`);
 
       for (let i = 0; i < 12; i++) {
         const col = randomZorn();
 
-        if (typeof brush !== 'undefined') {
+        if (hasBrush) {
           brush.set(
             "charcoal",
             color(col[0], col[1], col[2], random(30, 60)),
@@ -252,17 +250,13 @@
 
     // RENDER MASS: dipinge gruppo di note che si insistono
     function renderMass(mass) {
-      if (!brushReady) {
-        console.warn('⚠️ brush not ready, skipping mass');
-        return;
-      }
-
       // Zona sonora (non timeline!)
       const avgPitch = mass.reduce((s, n) => s + n.pitch, 0) / mass.length;
       const x = map(avgPitch, minPitch, maxPitch, width * 0.2, width * 0.8);
       const y = random(height * 0.3, height * 0.7);
 
-      console.log(`🎨 Rendering mass: ${mass.length} notes at x=${x.toFixed(0)}, y=${y.toFixed(0)}, brush=${typeof brush}`);
+      const hasBrush = (typeof brush !== 'undefined');
+      console.log(`🎨 Rendering mass: ${mass.length} notes at x=${x.toFixed(0)}, y=${y.toFixed(0)}, brush=${hasBrush}`);
 
       // Debug marker: mostra dove si dipinge
       push();
@@ -288,7 +282,7 @@
           let weight = map(note.velocity_value, 0.3, 0.8, 15, 60) * life;
 
           // Usa p5.brush se disponibile, altrimenti fallback a p5.js primitives
-          if (typeof brush !== 'undefined') {
+          if (hasBrush) {
             brush.set(
               "charcoal",
               color(baseCol[0], baseCol[1], baseCol[2], alpha),
