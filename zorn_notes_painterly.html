@@ -240,10 +240,17 @@
 
     // RENDER MASS: dipinge gruppo di note che si insistono
     function renderMass(mass) {
+      if (!brushReady) {
+        console.warn('⚠️ brush not ready, skipping mass');
+        return;
+      }
+
       // Zona sonora (non timeline!)
       const avgPitch = mass.reduce((s, n) => s + n.pitch, 0) / mass.length;
       const x = map(avgPitch, minPitch, maxPitch, width * 0.2, width * 0.8);
       const y = random(height * 0.3, height * 0.7);
+
+      console.log(`🎨 Rendering mass: ${mass.length} notes at x=${x.toFixed(0)}, y=${y.toFixed(0)}`);
 
       mass.forEach(note => {
         // Duration = passes (consumo pigmento)
