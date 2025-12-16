@@ -170,8 +170,8 @@
         if (typeof brush !== 'undefined') {
           brush.set(
             "charcoal",
-            color(col[0], col[1], col[2], random(20, 45)),
-            random(30, 80)
+            color(col[0], col[1], col[2], random(30, 60)),
+            random(40, 100)
           );
           brush.line(
             random(width),
@@ -180,9 +180,9 @@
             random(height)
           );
         } else {
-          // Fallback
-          stroke(col[0], col[1], col[2], random(20, 45));
-          strokeWeight(random(30, 80));
+          // Fallback with more visible strokes
+          stroke(col[0], col[1], col[2], random(30, 60));
+          strokeWeight(random(40, 100));
           line(
             random(width),
             random(height),
@@ -262,19 +262,30 @@
       const x = map(avgPitch, minPitch, maxPitch, width * 0.2, width * 0.8);
       const y = random(height * 0.3, height * 0.7);
 
-      console.log(`🎨 Rendering mass: ${mass.length} notes at x=${x.toFixed(0)}, y=${y.toFixed(0)}`);
+      console.log(`🎨 Rendering mass: ${mass.length} notes at x=${x.toFixed(0)}, y=${y.toFixed(0)}, brush=${typeof brush}`);
 
-      mass.forEach(note => {
+      // Debug marker: mostra dove si dipinge
+      push();
+      noStroke();
+      fill(255, 0, 0, 100);
+      ellipse(x, y, 10, 10);
+      pop();
+
+      mass.forEach((note, noteIdx) => {
         // Duration = passes (consumo pigmento)
         const passes = int(map(note.duration, 0, 3, 1, 8));
         const baseCol = getPitchColor(note.pitch, note.velocity_value);
+
+        if (noteIdx === 0) {
+          console.log(`  ↳ Note 0: duration=${note.duration.toFixed(2)}, passes=${passes}, velocity=${note.velocity_value.toFixed(2)}, technique=${note.technique}`);
+        }
 
         for (let i = 0; i < passes; i++) {
           let life = 1 - i / passes;  // Esaurimento
           let jitter = random(-20, 20) * (1 + note.tension);
 
-          let alpha = map(note.velocity_value, 0.3, 0.8, 40, 140) * life;
-          let weight = map(note.velocity_value, 0.3, 0.8, 10, 45) * life;
+          let alpha = map(note.velocity_value, 0.3, 0.8, 80, 200) * life;
+          let weight = map(note.velocity_value, 0.3, 0.8, 15, 60) * life;
 
           // Usa p5.brush se disponibile, altrimenti fallback a p5.js primitives
           if (typeof brush !== 'undefined') {
