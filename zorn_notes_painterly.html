@@ -166,18 +166,30 @@
 
       for (let i = 0; i < 12; i++) {
         const col = randomZorn();
-        brush.set(
-          "charcoal",
-          color(col[0], col[1], col[2], random(20, 45)),
-          random(30, 80)
-        );
 
-        brush.line(
-          random(width),
-          random(height),
-          random(width),
-          random(height)
-        );
+        if (typeof brush !== 'undefined') {
+          brush.set(
+            "charcoal",
+            color(col[0], col[1], col[2], random(20, 45)),
+            random(30, 80)
+          );
+          brush.line(
+            random(width),
+            random(height),
+            random(width),
+            random(height)
+          );
+        } else {
+          // Fallback
+          stroke(col[0], col[1], col[2], random(20, 45));
+          strokeWeight(random(30, 80));
+          line(
+            random(width),
+            random(height),
+            random(width),
+            random(height)
+          );
+        }
       }
 
       console.log('🎨 Canvas pre-painted with Zorn strokes');
@@ -264,35 +276,66 @@
           let alpha = map(note.velocity_value, 0.3, 0.8, 40, 140) * life;
           let weight = map(note.velocity_value, 0.3, 0.8, 10, 45) * life;
 
-          brush.set(
-            "charcoal",
-            color(baseCol[0], baseCol[1], baseCol[2], alpha),
-            weight
-          );
+          // Usa p5.brush se disponibile, altrimenti fallback a p5.js primitives
+          if (typeof brush !== 'undefined') {
+            brush.set(
+              "charcoal",
+              color(baseCol[0], baseCol[1], baseCol[2], alpha),
+              weight
+            );
 
-          // Technique cambia il GESTO
-          if (note.technique === "vibrato") {
-            let wobble = sin(frameCount * 0.1 + i) * 12;
-            brush.line(
-              x + wobble + jitter,
-              y + jitter,
-              x + wobble + random(-40, 40),
-              y + random(-40, 40)
-            );
-          } else if (note.technique === "bend") {
-            brush.line(
-              x,
-              y,
-              x + random(-30, 30),
-              y - note.tension * 80
-            );
+            // Technique cambia il GESTO
+            if (note.technique === "vibrato") {
+              let wobble = sin(frameCount * 0.1 + i) * 12;
+              brush.line(
+                x + wobble + jitter,
+                y + jitter,
+                x + wobble + random(-40, 40),
+                y + random(-40, 40)
+              );
+            } else if (note.technique === "bend") {
+              brush.line(
+                x,
+                y,
+                x + random(-30, 30),
+                y - note.tension * 80
+              );
+            } else {
+              brush.line(
+                x + jitter,
+                y + jitter,
+                x + random(-50, 50),
+                y + random(-50, 50)
+              );
+            }
           } else {
-            brush.line(
-              x + jitter,
-              y + jitter,
-              x + random(-50, 50),
-              y + random(-50, 50)
-            );
+            // Fallback: p5.js standard
+            stroke(baseCol[0], baseCol[1], baseCol[2], alpha);
+            strokeWeight(weight);
+
+            if (note.technique === "vibrato") {
+              let wobble = sin(frameCount * 0.1 + i) * 12;
+              line(
+                x + wobble + jitter,
+                y + jitter,
+                x + wobble + random(-40, 40),
+                y + random(-40, 40)
+              );
+            } else if (note.technique === "bend") {
+              line(
+                x,
+                y,
+                x + random(-30, 30),
+                y - note.tension * 80
+              );
+            } else {
+              line(
+                x + jitter,
+                y + jitter,
+                x + random(-50, 50),
+                y + random(-50, 50)
+              );
+            }
           }
         }
       });
