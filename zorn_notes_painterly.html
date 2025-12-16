@@ -88,7 +88,7 @@
       white: [250, 247, 241]     // Titanium White
     };
 
-    let notes = [];
+    let notesData = [];
     let audio;
     let isPainting = false;
     let currentNoteIndex = 0;
@@ -101,7 +101,7 @@
     let minPitch = 999, maxPitch = 0;
 
     function preload() {
-      notes = loadJSON('1207(1)_notes.json');
+      notesData = loadJSON('1207(1)_notes.json');
     }
 
     function setup() {
@@ -122,15 +122,22 @@
       background(255);
       strokeCap(ROUND);
 
+      // Verifica che notes sia caricato correttamente
+      if (!notesData || !Array.isArray(notesData)) {
+        console.error('❌ Errore caricamento notes:', notesData);
+        return;
+      }
+
       // Trova range di pitch per mappatura
-      for (let note of notes) {
+      for (let i = 0; i < notesData.length; i++) {
+        const note = notesData[i];
         if (note.pitch < minPitch) minPitch = note.pitch;
         if (note.pitch > maxPitch) maxPitch = note.pitch;
       }
 
-      document.getElementById('totalNotes').textContent = notes.length;
+      document.getElementById('totalNotes').textContent = notesData.length;
 
-      console.log('🎵 Note caricate:', notes.length);
+      console.log('🎵 Note caricate:', notesData.length);
       console.log('📊 Pitch range:', minPitch, '-', maxPitch);
 
       noLoop();
@@ -143,8 +150,8 @@
       document.getElementById('currentTime').textContent = currentTime.toFixed(1);
 
       // Disegna tutte le note il cui start_time è passato e non sono ancora dipinte
-      while (currentNoteIndex < notes.length) {
-        const note = notes[currentNoteIndex];
+      while (currentNoteIndex < notesData.length) {
+        const note = notesData[currentNoteIndex];
 
         if (note.start_time <= currentTime) {
           // Disegna pennellata per questa nota
@@ -158,7 +165,7 @@
       }
 
       // Ferma quando audio finito
-      if (audio.ended || currentNoteIndex >= notes.length) {
+      if (audio.ended || currentNoteIndex >= notesData.length) {
         isPainting = false;
         noLoop();
         console.log('🎨 Painting complete!');
@@ -173,7 +180,7 @@
       const y = map(note.pitch, minPitch, maxPitch, canvasHeight - 100, 100);
 
       // 2. Posizione X: progresso temporale con variazione
-      const baseX = map(note.start_time, 0, notes[notes.length - 1].start_time + 2, 50, canvasWidth - 50);
+      const baseX = map(note.start_time, 0, notesData[notesData.length - 1].start_time + 2, 50, canvasWidth - 50);
       const x = baseX + random(-30, 30);  // Variazione per effetto pittorico
 
       // 3. Lunghezza: duration (nota più lunga = pennellata più lunga)
