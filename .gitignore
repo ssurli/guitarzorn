@@ -44,3 +44,10 @@ frames/
 .DS_Store
 Thumbs.db
 .env
+
+# Media files
+*.mp4
+*.wav
+
+# Large assets
+*.png
