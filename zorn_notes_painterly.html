@@ -89,9 +89,10 @@
     };
 
     let notesData = [];
+    let noteGroups = [];
+    let currentGroupIndex = 0;
     let audio;
     let isPainting = false;
-    let currentNoteIndex = 0;
     let paintedNotes = 0;
     let brushReady = false;
     let canvasWidth = 1400;
@@ -119,7 +120,7 @@
         }
       }, 100);
 
-      background(255);
+      seedCanvas();  // Pre-dipingi il canvas
       strokeCap(ROUND);
 
       // Converti l'oggetto in array se necessario
@@ -142,10 +143,60 @@
 
       document.getElementById('totalNotes').textContent = notesData.length;
 
+      // Raggruppa note in sound masses
+      noteGroups = groupNotes(notesData);
+
       console.log('🎵 Note caricate:', notesData.length);
       console.log('📊 Pitch range:', minPitch, '-', maxPitch);
+      console.log('🎭 Sound masses:', noteGroups.length);
 
       noLoop();
+    }
+
+    // PRE-PAINTING: sporca il canvas prima di iniziare
+    function seedCanvas() {
+      background(248);
+
+      for (let i = 0; i < 12; i++) {
+        const col = randomZorn();
+        brush.set(
+          "charcoal",
+          color(col[0], col[1], col[2], random(20, 45)),
+          random(30, 80)
+        );
+
+        brush.line(
+          random(width),
+          random(height),
+          random(width),
+          random(height)
+        );
+      }
+    }
+
+    // Raggruppa note vicine temporalmente (sound mass)
+    function groupNotes(notes, window = 0.4) {
+      let groups = [];
+      let current = [];
+
+      notes.forEach(n => {
+        if (!current.length ||
+            n.start_time - current[current.length - 1].start_time < window) {
+          current.push(n);
+        } else {
+          groups.push(current);
+          current = [n];
+        }
+      });
+
+      if (current.length) groups.push(current);
+      return groups;
+    }
+
+    // Helper: colore Zorn casuale
+    function randomZorn() {
+      const keys = Object.keys(ZORN_COLORS);
+      return ZORN_COLORS[keys[floor(random(keys.length))]];
     }
 
     function draw() {
@@ -154,23 +205,23 @@
       const currentTime = audio.currentTime;
       document.getElementById('currentTime').textContent = currentTime.toFixed(1);
 
-      // Disegna tutte le note il cui start_time è passato e non sono ancora dipinte
-      while (currentNoteIndex < notesData.length) {
-        const note = notesData[currentNoteIndex];
+      // Disegna sound masses invece di note singole
+      while (currentGroupIndex < noteGroups.length) {
+        const group = noteGroups[currentGroupIndex];
+        const groupStart = group[0].start_time;
 
-        if (note.start_time <= currentTime) {
-          // Disegna pennellata per questa nota
-          paintNote(note, currentNoteIndex);
-          currentNoteIndex++;
-          paintedNotes++;
+        if (groupStart <= currentTime) {
+          renderMass(group);
+          currentGroupIndex++;
+          paintedNotes += group.length;
           document.getElementById('noteCount').textContent = paintedNotes;
         } else {
-          break;  // Note future non ancora da dipingere
+          break;
         }
       }
 
       // Ferma quando audio finito
-      if (audio.ended || currentNoteIndex >= notesData.length) {
+      if (audio.ended || currentGroupIndex >= noteGroups.length) {
         isPainting = false;
         noLoop();
         console.log('🎨 Painting complete!');
@@ -178,53 +229,57 @@
       }
     }
 
-    function paintNote(note, index) {
-      // Mappatura proprietà nota → parametri pennellata
+    // RENDER MASS: dipinge gruppo di note che si insistono
+    function renderMass(mass) {
+      // Zona sonora (non timeline!)
+      const avgPitch = mass.reduce((s, n) => s + n.pitch, 0) / mass.length;
+      const x = map(avgPitch, minPitch, maxPitch, width * 0.2, width * 0.8);
+      const y = random(height * 0.3, height * 0.7);
 
-      // 1. Posizione Y: pitch (nota più alta = più in alto)
-      const y = map(note.pitch, minPitch, maxPitch, canvasHeight - 100, 100);
+      mass.forEach(note => {
+        // Duration = passes (consumo pigmento)
+        const passes = int(map(note.duration, 0, 3, 1, 8));
+        const baseCol = getPitchColor(note.pitch, note.velocity_value);
 
-      // 2. Posizione X: progresso temporale con variazione
-      const baseX = map(note.start_time, 0, notesData[notesData.length - 1].start_time + 2, 50, canvasWidth - 50);
-      const x = baseX + random(-30, 30);  // Variazione per effetto pittorico
+        for (let i = 0; i < passes; i++) {
+          let life = 1 - i / passes;  // Esaurimento
+          let jitter = random(-20, 20) * (1 + note.tension);
 
-      // 3. Lunghezza: duration (nota più lunga = pennellata più lunga)
-      const strokeLength = map(note.duration, 0, 2, 40, 200);
+          let alpha = map(note.velocity_value, 0.3, 0.8, 40, 140) * life;
+          let weight = map(note.velocity_value, 0.3, 0.8, 10, 45) * life;
 
-      // 4. Spessore: velocity (dinamica forte = pennellata più spessa)
-      const brushWeight = map(note.velocity_value, 0.3, 0.7, 5, 25);
+          brush.set(
+            "charcoal",
+            color(baseCol[0], baseCol[1], baseCol[2], alpha),
+            weight
+          );
 
-      // 5. Angolo: tension (tensione alta = pennellata più verticale/energica)
-      const baseAngle = map(note.tension, 0, 1, -0.3, 0.3);
-      const angle = baseAngle + random(-0.2, 0.2);
-
-      // 6. Colore: mappa pitch alla Zorn palette
-      const col = getPitchColor(note.pitch, note.velocity_value);
-
-      // Calcola endpoint della pennellata
-      const x2 = x + strokeLength * cos(angle);
-      const y2 = y + strokeLength * sin(angle);
-
-      // Disegna con p5.brush se disponibile
-      if (brushReady) {
-        // Scelta brush type basata su technique
-        const brushType = note.technique === "bend" ? "spray" : "marker2";
-        brush.set(brushType, color(...col, 200), brushWeight);
-        brush.line(x, y, x2, y2);
-
-        // Aggiungi texturing con pennellate secondarie
-        if (note.velocity_value > 0.5) {
-          brush.set("charcoal", color(...col, 80), brushWeight * 0.3);
-          brush.line(x + random(-5, 5), y + random(-5, 5), x2 + random(-5, 5), y2 + random(-5, 5));
+          // Technique cambia il GESTO
+          if (note.technique === "vibrato") {
+            let wobble = sin(frameCount * 0.1 + i) * 12;
+            brush.line(
+              x + wobble + jitter,
+              y + jitter,
+              x + wobble + random(-40, 40),
+              y + random(-40, 40)
+            );
+          } else if (note.technique === "bend") {
+            brush.line(
+              x,
+              y,
+              x + random(-30, 30),
+              y - note.tension * 80
+            );
+          } else {
+            brush.line(
+              x + jitter,
+              y + jitter,
+              x + random(-50, 50),
+              y + random(-50, 50)
+            );
+          }
         }
-      } else {
-        // Fallback senza p5.brush
-        stroke(...col, 200);
-        strokeWeight(brushWeight);
-        line(x, y, x2, y2);
-      }
-
-      console.log(`🎵 Painted note ${index}: ${note.note} (pitch ${note.pitch}) at ${note.start_time.toFixed(2)}s`);
+      });
     }
 
     function getPitchColor(pitch, velocity) {
@@ -264,7 +319,7 @@
     async function startPainting() {
       if (isPainting) return;
 
-      currentNoteIndex = 0;
+      currentGroupIndex = 0;
       paintedNotes = 0;
       isPainting = true;
 
@@ -297,8 +352,8 @@
     }
 
     function clearCanvas() {
-      background(255);
-      currentNoteIndex = 0;
+      seedCanvas();
+      currentGroupIndex = 0;
       paintedNotes = 0;
       isPainting = false;
       noLoop();
