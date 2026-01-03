@@ -67,7 +67,6 @@
     <div class="stat">Densità grid: <strong id="gridSize">0</strong></div>
     <div class="stat">Layer corrente: <strong id="currentLayer">0/3</strong></div>
     <div class="stat">Strokes disegnati: <strong id="strokeCount">0</strong></div>
-    <div class="stat">Tempo: <strong id="currentTime">0.0</strong>s</div>
   </div>
 
   <div id="canvasContainer"></div>
@@ -88,7 +87,6 @@
 
     // STATE
     let notesData = [];
-    let audio;
     let isPainting = false;
 
     // DENSITY FIELD
@@ -105,7 +103,6 @@
     // PRELOAD
     function preload() {
       notesData = loadJSON('1207(1)_notes.json');
-      audio = loadSound('1207(1)_audio.wav');
     }
 
     function setup() {
