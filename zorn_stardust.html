@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zorn Musical Stardust - Sergio Albiac Inspired</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.2/p5.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #1a1a1a;
+      color: #fff;
+      font-family: 'Courier New', monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    #canvasContainer {
+      margin: 20px 0;
+      box-shadow: 0 0 30px rgba(0,0,0,0.5);
+    }
+
+    #controls {
+      display: flex;
+      gap: 15px;
+      margin: 20px 0;
+      align-items: center;
+    }
+
+    button {
+      padding: 10px 20px;
+      background: #d4a574;
+      border: none;
+      color: #000;
+      cursor: pointer;
+      font-weight: bold;
+      font-family: 'Courier New', monospace;
+    }
+
+    button:hover { background: #e8b88a; }
+    button:disabled { background: #555; cursor: not-allowed; }
+
+    #info {
+      background: rgba(255,255,255,0.1);
+      padding: 15px;
+      border-radius: 5px;
+      min-width: 300px;
+    }
+
+    .stat { margin: 5px 0; }
+  </style>
+</head>
+<body>
+  <h1>🎨 Zorn Musical Stardust</h1>
+  <p>Approccio ispirato a Sergio Albiac - Particle-based generative rendering</p>
+
+  <div id="controls">
+    <button id="startBtn">▶ Start Painting</button>
+    <button id="stopBtn" disabled>⏹ Stop</button>
+    <button id="resetBtn">🔄 Reset</button>
+  </div>
+
+  <div id="info">
+    <div class="stat">Note caricate: <strong id="totalNotes">0</strong></div>
+    <div class="stat">Densità grid: <strong id="gridSize">0</strong></div>
+    <div class="stat">Layer corrente: <strong id="currentLayer">0/3</strong></div>
+    <div class="stat">Strokes disegnati: <strong id="strokeCount">0</strong></div>
+    <div class="stat">Tempo: <strong id="currentTime">0.0</strong>s</div>
+  </div>
+
+  <div id="canvasContainer"></div>
+
+  <script>
+    // CONFIG
+    const canvasWidth = 1200;
+    const canvasHeight = 800;
+    const GRID_RESOLUTION = 40; // Risoluzione griglia densità
+
+    // ZORN PALETTE
+    const ZORN_COLORS = {
+      yellow: [227, 168, 87],   // Yellow Ochre
+      red: [198, 45, 37],        // Vermilion
+      black: [43, 43, 43],       // Ivory Black
+      white: [240, 234, 214]     // Titanium White
+    };
+
+    // STATE
+    let notesData = [];
+    let audio;
+    let isPainting = false;
+
+    // DENSITY FIELD
+    let densityField = [];
+    let maxDensity = 0;
+    let minPitch = 999, maxPitch = 0;
+    let maxTime = 0;
+
+    // RENDERING STATE
+    let currentLayer = 0;
+    let strokeCount = 0;
+    let layerPoints = []; // Punti da disegnare nel layer corrente
+
+    // PRELOAD
+    function preload() {
+      notesData = loadJSON('1207(1)_notes.json');
+      audio = loadSound('1207(1)_audio.wav');
+    }
+
+    function setup() {
+      createCanvas(canvasWidth, canvasHeight).parent('canvasContainer');
+      pixelDensity(1);
+      background(248); // Carta da disegno
+      noLoop();
+
+      // Converti in array se necessario
+      if (notesData && !Array.isArray(notesData)) {
+        notesData = Object.values(notesData);
+      }
+
+      if (!notesData || notesData.length === 0) {
+        console.error('❌ Errore caricamento notes');
+        return;
+      }
+
+      // Trova range
+      notesData.forEach(note => {
+        if (note.pitch < minPitch) minPitch = note.pitch;
+        if (note.pitch > maxPitch) maxPitch = note.pitch;
+        if (note.start_time + note.duration > maxTime) {
+          maxTime = note.start_time + note.duration;
+        }
+      });
+
+      console.log('🎵 Note caricate:', notesData.length);
+      console.log('📊 Pitch range:', minPitch, '-', maxPitch);
+      console.log('⏱️ Duration:', maxTime.toFixed(2), 's');
+
+      document.getElementById('totalNotes').textContent = notesData.length;
+
+      // Crea density field
+      buildDensityField();
+
+      // Setup controls
+      document.getElementById('startBtn').onclick = startPainting;
+      document.getElementById('stopBtn').onclick = stopPainting;
+      document.getElementById('resetBtn').onclick = resetCanvas;
+    }
+
+    // COSTRUISCI CAMPO DI DENSITÀ
+    // Divide lo spazio pitch/time in griglia e conta le note in ogni cella
+    function buildDensityField() {
+      // Inizializza griglia
+      densityField = [];
+      for (let i = 0; i < GRID_RESOLUTION; i++) {
+        densityField[i] = [];
+        for (let j = 0; j < GRID_RESOLUTION; j++) {
+          densityField[i][j] = 0;
+        }
+      }
+
+      // Popola con le note
+      notesData.forEach(note => {
+        // Mappa pitch → riga griglia (Y)
+        const row = floor(map(note.pitch, minPitch, maxPitch, 0, GRID_RESOLUTION - 1));
+        // Mappa time → colonna griglia (X)
+        const col = floor(map(note.start_time, 0, maxTime, 0, GRID_RESOLUTION - 1));
+
+        // Incrementa densità nella cella
+        if (row >= 0 && row < GRID_RESOLUTION && col >= 0 && col < GRID_RESOLUTION) {
+          // Peso basato su velocity e duration
+          const weight = note.velocity_value * (1 + note.duration);
+          densityField[row][col] += weight;
+        }
+      });
+
+      // Trova massima densità per normalizzazione
+      maxDensity = 0;
+      for (let i = 0; i < GRID_RESOLUTION; i++) {
+        for (let j = 0; j < GRID_RESOLUTION; j++) {
+          if (densityField[i][j] > maxDensity) {
+            maxDensity = densityField[i][j];
+          }
+        }
+      }
+
+      console.log('🎯 Density field costruito:', GRID_RESOLUTION + 'x' + GRID_RESOLUTION);
+      console.log('📈 Max density:', maxDensity.toFixed(2));
+      document.getElementById('gridSize').textContent = GRID_RESOLUTION + 'x' + GRID_RESOLUTION;
+    }
+
+    // OTTIENI DENSITÀ IN UNA POSIZIONE DEL CANVAS
+    function getDensityAt(x, y) {
+      const col = floor(map(x, 0, width, 0, GRID_RESOLUTION - 1));
+      const row = floor(map(y, 0, height, 0, GRID_RESOLUTION - 1));
+
+      if (row >= 0 && row < GRID_RESOLUTION && col >= 0 && col < GRID_RESOLUTION) {
+        return densityField[row][col] / maxDensity; // Normalizzato 0-1
+      }
+      return 0;
+    }
+
+    // CALCOLA DIREZIONE VERSO CENTRO DI MASSA LOCALE
+    // Guarda le celle vicine e trova la direzione verso maggiore densità
+    function getFlowDirection(x, y) {
+      const col = floor(map(x, 0, width, 0, GRID_RESOLUTION - 1));
+      const row = floor(map(y, 0, height, 0, GRID_RESOLUTION - 1));
+
+      let sumX = 0;
+      let sumY = 0;
+      let totalWeight = 0;
+
+      // Guarda un intorno 5x5
+      const radius = 2;
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          const r = row + dy;
+          const c = col + dx;
+
+          if (r >= 0 && r < GRID_RESOLUTION && c >= 0 && c < GRID_RESOLUTION) {
+            const density = densityField[r][c];
+            sumX += dx * density;
+            sumY += dy * density;
+            totalWeight += density;
+          }
+        }
+      }
+
+      if (totalWeight > 0) {
+        // Normalizza e crea vettore direzione
+        return createVector(sumX / totalWeight, sumY / totalWeight).normalize();
+      }
+
+      return createVector(0, 0);
+    }
+
+    // COLORE ZORN BASATO SU DENSITÀ E POSIZIONE
+    function getColorForPoint(x, y, density) {
+      // Usa la posizione Y per variare tra caldo/freddo
+      const warmth = map(y, 0, height, 0, 1);
+
+      let col;
+      if (density > 0.7) {
+        // Alta densità → nero o rosso
+        col = random() > 0.5 ? ZORN_COLORS.black : ZORN_COLORS.red;
+      } else if (density > 0.3) {
+        // Media densità → giallo o mix
+        col = random() > warmth ? ZORN_COLORS.yellow : ZORN_COLORS.red;
+      } else {
+        // Bassa densità → bianco o giallo chiaro
+        col = random() > 0.7 ? ZORN_COLORS.white : ZORN_COLORS.yellow;
+      }
+
+      return col;
+    }
+
+    // GENERA PUNTI PER UN LAYER USANDO POISSON DISK SAMPLING SEMPLIFICATO
+    function generateLayerPoints(layerIndex) {
+      const points = [];
+
+      // Parametri per layer:
+      // Layer 0 (structure): pochi punti, stroke lunghi
+      // Layer 1 (density): più punti, stroke medi
+      // Layer 2 (details): molti punti, stroke corti
+
+      const configs = [
+        { minDist: 60, strokeLen: [40, 100], strokeWeight: [3, 8], count: 200 },   // Structure
+        { minDist: 30, strokeLen: [20, 50], strokeWeight: [2, 5], count: 500 },    // Density
+        { minDist: 15, strokeLen: [5, 20], strokeWeight: [1, 3], count: 1000 }     // Details
+      ];
+
+      const config = configs[layerIndex];
+
+      // Genera punti con spacing basato su densità
+      for (let attempt = 0; attempt < config.count * 3; attempt++) {
+        const x = random(width);
+        const y = random(height);
+        const density = getDensityAt(x, y);
+
+        // Probabilità di accettare il punto basata su densità
+        if (random() < density * 0.5 + 0.1) { // Almeno 10% anche in zone vuote
+          // Verifica distanza minima (semplificato, non vero Poisson)
+          let tooClose = false;
+          for (let p of points) {
+            if (dist(x, y, p.x, p.y) < config.minDist * (1 - density * 0.5)) {
+              tooClose = true;
+              break;
+            }
+          }
+
+          if (!tooClose) {
+            // Calcola direzione stroke
+            const flowDir = getFlowDirection(x, y);
+            const angle = flowDir.heading() + random(-0.3, 0.3); // Piccola variazione
+
+            const strokeLen = random(config.strokeLen[0], config.strokeLen[1]) * (0.5 + density * 0.5);
+            const strokeW = random(config.strokeWeight[0], config.strokeWeight[1]);
+
+            points.push({
+              x: x,
+              y: y,
+              angle: angle,
+              length: strokeLen,
+              weight: strokeW,
+              density: density,
+              color: getColorForPoint(x, y, density)
+            });
+
+            if (points.length >= config.count) break;
+          }
+        }
+      }
+
+      console.log(`📍 Layer ${layerIndex}: ${points.length} punti generati`);
+      return points;
+    }
+
+    // DISEGNA SINGOLO STROKE
+    function drawStroke(point) {
+      const col = point.color;
+      const alpha = map(point.density, 0, 1, 30, 150);
+
+      stroke(col[0], col[1], col[2], alpha);
+      strokeWeight(point.weight);
+      strokeCap(ROUND);
+
+      // Calcola fine della linea
+      const x2 = point.x + cos(point.angle) * point.length;
+      const y2 = point.y + sin(point.angle) * point.length;
+
+      line(point.x, point.y, x2, y2);
+
+      strokeCount++;
+    }
+
+    function startPainting() {
+      isPainting = true;
+      currentLayer = 0;
+      strokeCount = 0;
+
+      document.getElementById('startBtn').disabled = true;
+      document.getElementById('stopBtn').disabled = false;
+
+      // Inizia dal layer 0
+      renderLayer(0);
+
+      console.log('🎨 Painting started');
+    }
+
+    function renderLayer(layerIndex) {
+      if (layerIndex >= 3 || !isPainting) {
+        console.log('✅ Painting complete!');
+        stopPainting();
+        return;
+      }
+
+      currentLayer = layerIndex;
+      document.getElementById('currentLayer').textContent = (layerIndex + 1) + '/3';
+
+      console.log(`🎨 Rendering layer ${layerIndex}...`);
+
+      // Genera punti per questo layer
+      layerPoints = generateLayerPoints(layerIndex);
+
+      // Disegna tutti i punti
+      layerPoints.forEach(point => {
+        drawStroke(point);
+      });
+
+      document.getElementById('strokeCount').textContent = strokeCount;
+
+      // Passa al prossimo layer dopo un breve delay
+      setTimeout(() => {
+        renderLayer(layerIndex + 1);
+      }, 500);
+    }
+
+    function stopPainting() {
+      isPainting = false;
+      document.getElementById('startBtn').disabled = false;
+      document.getElementById('stopBtn').disabled = true;
+      console.log('⏹ Painting stopped');
+    }
+
+    function resetCanvas() {
+      stopPainting();
+      background(248);
+      strokeCount = 0;
+      currentLayer = 0;
+      document.getElementById('strokeCount').textContent = '0';
+      document.getElementById('currentLayer').textContent = '0/3';
+      console.log('🔄 Canvas reset');
+    }
+  </script>
+</body>
+</html>
