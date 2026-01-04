@@ -129,7 +129,7 @@
     let minPitch = 999, maxPitch = 0, maxTime = 0;
 
     let targetImg;
-    let canvas;
+    let paintCanvas;
     let similarColor = [];
     let visitedPixels = [];
 
@@ -659,12 +659,12 @@
       console.log('🎨 Musical target created');
 
       // Create canvas
-      canvas = createGraphics(W, H);
-      canvas.beginDraw();
-      canvas.background(KEY_COLOR[0], KEY_COLOR[1], KEY_COLOR[2]);
-      canvas.strokeCap(SQUARE);
-      canvas.noSmooth();
-      canvas.endDraw();
+      paintCanvas = createGraphics(W, H);
+      paintCanvas.beginDraw();
+      paintCanvas.background(KEY_COLOR[0], KEY_COLOR[1], KEY_COLOR[2]);
+      paintCanvas.strokeCap(SQUARE);
+      paintCanvas.noSmooth();
+      paintCanvas.endDraw();
 
       // Init arrays
       for (let row = 0; row < H; row++) {
@@ -698,7 +698,7 @@
       };
 
       document.getElementById('saveBtn').onclick = () => {
-        save(canvas, 'zorn_oil_painting.png');
+        save(paintCanvas, 'zorn_oil_painting.png');
         console.log('💾 Saved');
       };
 
@@ -754,7 +754,7 @@
           attempts++;
         }
 
-        if (valid && currentTrace.calculateColors(MAX_COLOR_DIFF, similarColor, targetImg, canvas)) {
+        if (valid && currentTrace.calculateColors(MAX_COLOR_DIFF, similarColor, targetImg, paintCanvas)) {
           needNewTrace = false;
           tracesCount++;
           invalidCounter = 0;
@@ -765,12 +765,12 @@
         updateUI();
       } else {
         // Paint trace
-        currentTrace.paint(canvas, visitedPixels);
+        currentTrace.paint(paintCanvas, visitedPixels);
         needNewTrace = true;
-        populateSimilarColor(MAX_COLOR_DIFF, similarColor, targetImg, canvas);
+        populateSimilarColor(MAX_COLOR_DIFF, similarColor, targetImg, paintCanvas);
 
         // Draw canvas
-        image(canvas, 0, 0);
+        image(paintCanvas, 0, 0);
 
         // Update FPS
         if (frameCount % 30 === 0) {
