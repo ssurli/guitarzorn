@@ -505,8 +505,6 @@
         const nRows = visited.length;
         const nCols = visited[0].length;
 
-        canvasGfx.beginDraw();
-
         for (let s = 0; s < this.nSteps; s++) {
           this.brush.update(this.pos[s]);
           this.brush.paint(this.colors[s], this.alphas[s], this.minAlpha, canvasGfx);
@@ -525,7 +523,6 @@
           }
         }
 
-        canvasGfx.endDraw();
         this.brush.reset(this.pos[0]);
       }
     }
@@ -660,11 +657,10 @@
 
       // Create canvas
       paintCanvas = createGraphics(W, H);
-      paintCanvas.beginDraw();
       paintCanvas.background(KEY_COLOR[0], KEY_COLOR[1], KEY_COLOR[2]);
       paintCanvas.strokeCap(SQUARE);
       paintCanvas.noSmooth();
-      paintCanvas.endDraw();
+      console.log('🖼️ Paint canvas created');
 
       // Init arrays
       for (let row = 0; row < H; row++) {
