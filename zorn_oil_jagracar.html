@@ -456,11 +456,11 @@
         // Set initial colors with brightness variation
         const hAvg = hue(color(rAvg, gAvg, bAvg));
         const sAvg = saturation(color(rAvg, gAvg, bAvg));
-        const bAvg = brightness(color(rAvg, gAvg, bAvg));
+        const briAvg = brightness(color(rAvg, gAvg, bAvg));
 
         colorMode(HSB, 255);
         for (let b = 0; b < this.nBristles; b++) {
-          const bri = constrain(bAvg + this.brightnessChange * (random() - 0.5), 0, 255);
+          const bri = constrain(briAvg + this.brightnessChange * (random() - 0.5), 0, 255);
           const col = color(hAvg, sAvg, bri);
           this.colors[0][b] = [red(col), green(col), blue(col)];
         }
