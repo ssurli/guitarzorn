@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zorn Oil Painting - Algoritmo Jagracar</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.2/p5.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #1a1a1a;
+      color: #fff;
+      font-family: 'Courier New', monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h1 { margin: 10px 0; font-size: 28px; color: #d4a574; }
+    p { margin: 5px 0; color: #aaa; font-size: 14px; }
+
+    #canvasContainer {
+      margin: 20px 0;
+      box-shadow: 0 0 30px rgba(0,0,0,0.5);
+      background: white;
+    }
+
+    #controls {
+      display: flex;
+      gap: 15px;
+      margin: 20px 0;
+      align-items: center;
+    }
+
+    button {
+      padding: 12px 24px;
+      background: #d4a574;
+      border: none;
+      color: #000;
+      cursor: pointer;
+      font-weight: bold;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+    }
+
+    button:hover { background: #e8b88a; }
+    button:disabled { background: #555; cursor: not-allowed; color: #888; }
+
+    #info {
+      background: rgba(255,255,255,0.1);
+      padding: 20px;
+      border-radius: 8px;
+      min-width: 500px;
+      text-align: center;
+    }
+
+    .stat {
+      margin: 8px 0;
+      font-size: 15px;
+    }
+
+    .stat strong {
+      color: #d4a574;
+      font-size: 16px;
+    }
+
+    .credits {
+      margin-top: 20px;
+      font-size: 11px;
+      color: #666;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎨 Zorn Musical Oil Painting</h1>
+  <p>Algoritmo di Javier Graciá Carpio adattato per note musicali</p>
+
+  <div id="controls">
+    <button id="startBtn">▶ Start Painting</button>
+    <button id="pauseBtn" disabled>⏸ Pause</button>
+    <button id="saveBtn">💾 Save Image</button>
+  </div>
+
+  <div id="info">
+    <div class="stat">Note caricate: <strong id="totalNotes">0</strong></div>
+    <div class="stat">Brush size: <strong id="brushSize">--</strong>px</div>
+    <div class="stat">Traces dipinte: <strong id="tracesCount">0</strong></div>
+    <div class="stat">Traces invalide: <strong id="invalidCount">0</strong> / <strong id="invalidMax">--</strong></div>
+    <div class="stat">FPS: <strong id="fps">0</strong></div>
+    <div class="credits">
+      Ispirato da Javier Graciá Carpio (jagracar) | Zorn Palette | CC BY-SA
+    </div>
+  </div>
+
+  <div id="canvasContainer"></div>
+
+  <script>
+    // ============================================================================
+    // CONFIGURATION
+    // ============================================================================
+    const W = 1200;
+    const H = 800;
+
+    // Zorn Palette
+    const ZORN = {
+      yellow: [227, 168, 87],
+      red: [198, 45, 37],
+      black: [43, 43, 43],
+      white: [240, 234, 214]
+    };
+
+    // Jagracar algorithm parameters
+    const MAX_COLOR_DIFF = [40, 40, 40];
+    const SMALLER_BRUSH = 4;
+    const BRUSH_DECREMENT = 1.3;
+    const MAX_INVALID_TRACES = 250;
+    const MAX_INVALID_TRACES_SMALL = 350;
+    const TRACE_SPEED = 2;
+    const REL_TRACE_LENGTH = 2.3;
+    const MIN_TRACE_LENGTH = 8;
+    const KEY_COLOR = [255, 0, 255]; // Magenta
+
+    // ============================================================================
+    // GLOBAL STATE
+    // ============================================================================
+    let notes = [];
+    let minPitch = 999, maxPitch = 0, maxTime = 0;
+
+    let targetImg;
+    let canvas;
+    let similarColor = [];
+    let visitedPixels = [];
+
+    let brushSize;
+    let invalidCounter = 0;
+    let tracesCount = 0;
+    let isPainting = false;
+    let needNewTrace = true;
+    let currentTrace = null;
+    let frameStart = 0;
+
+    // ============================================================================
+    // BRISTLE CLASS - Singola setola del pennello
+    // ============================================================================
+    class Bristle {
+      constructor(nParts, initLen, deltaLen, initThick, deltaThick) {
+        this.nPos = max(2, nParts + 1);
+        this.pos = [];
+        this.len = [];
+        this.thick = [];
+
+        for (let i = 0; i < this.nPos; i++) {
+          this.pos.push(createVector(0, 0));
+          this.len.push(max(1, initLen - i * deltaLen));
+          this.thick.push(max(0.1, initThick - i * deltaThick));
+        }
+      }
+
+      init(p) {
+        for (let i = 0; i < this.nPos; i++) {
+          this.pos[i].set(p);
+        }
+      }
+
+      update(newPos) {
+        this.pos[0].set(newPos);
+        for (let i = 1; i < this.nPos; i++) {
+          const ang = atan2(
+            this.pos[i-1].y - this.pos[i].y,
+            this.pos[i-1].x - this.pos[i].x
+          );
+          this.pos[i].set(
+            this.pos[i-1].x - this.len[i] * cos(ang),
+            this.pos[i-1].y - this.len[i] * sin(ang)
+          );
+        }
+      }
+
+      paint(col, gfx) {
+        gfx.stroke(col);
+        for (let i = 1; i < this.nPos; i++) {
+          gfx.strokeWeight(this.thick[i]);
+          gfx.line(
+            this.pos[i-1].x, this.pos[i-1].y,
+            this.pos[i].x, this.pos[i].y
+          );
+        }
+      }
+    }
+
+    // ============================================================================
+    // BRUSH CLASS - Pennello composto da multiple setole
+    // ============================================================================
+    class Brush {
+      constructor(initPos, size, nBristles, bristleLen, bristleThick) {
+        this.pos = initPos.copy();
+        this.dirAng = 0;
+        this.nBristles = nBristles;
+        this.bristles = [];
+        this.offsets = [];
+        this.bristlesPos = [];
+        this.history = [];
+        this.avgPos = this.pos.copy();
+        this.noiseSeed = random(1000);
+        this.updateCounter = 0;
+
+        this.historySize = 4;
+        this.vertNoise = 8;
+        this.horNoise = min(0.3 * size, 4);
+        this.noiseSpeed = 0.04;
+
+        const nParts = max(3, round(sqrt(2 * bristleLen)));
+        const initLen = nParts;
+        const deltaLen = 1;
+        const initThick = bristleThick;
+        const deltaThick = initThick / nParts;
+
+        for (let i = 0; i < nBristles; i++) {
+          this.bristles.push(new Bristle(nParts, initLen, deltaLen, initThick, deltaThick));
+          this.offsets.push(createVector(
+            size * (random() - 0.5),
+            this.vertNoise * (random() - 0.5)
+          ));
+          this.bristlesPos.push(createVector(0, 0));
+        }
+
+        this.updateBristlesPos();
+      }
+
+      updateBristlesPos() {
+        const c = cos(this.dirAng);
+        const s = sin(this.dirAng);
+
+        for (let i = 0; i < this.nBristles; i++) {
+          const noiseVal = noise(
+            this.noiseSeed + this.noiseSpeed * this.updateCounter,
+            this.noiseSeed + i
+          );
+          const x = this.offsets[i].x + this.horNoise * (noiseVal - 0.5);
+          const y = this.offsets[i].y;
+
+          this.bristlesPos[i].set(
+            this.pos.x + (x * c - y * s),
+            this.pos.y + (x * s + y * c)
+          );
+        }
+      }
+
+      update(newPos) {
+        if (newPos.x !== this.pos.x || newPos.y !== this.pos.y) {
+          this.history.push(newPos.copy());
+          if (this.history.length > this.historySize) {
+            this.history.shift();
+          }
+
+          let newAvg = createVector(0, 0);
+          for (let p of this.history) {
+            newAvg.add(p);
+          }
+          newAvg.div(this.history.length);
+
+          this.dirAng = atan2(
+            newAvg.y - this.avgPos.y,
+            newAvg.x - this.avgPos.x
+          );
+          this.dirAng += HALF_PI;
+
+          this.pos.set(newPos);
+          this.avgPos.set(newAvg);
+          this.updateBristlesPos();
+
+          if (this.history.length < this.historySize) {
+            for (let i = 0; i < this.nBristles; i++) {
+              this.bristles[i].init(this.bristlesPos[i]);
+            }
+          } else {
+            for (let i = 0; i < this.nBristles; i++) {
+              this.bristles[i].update(this.bristlesPos[i]);
+            }
+          }
+        }
+
+        this.updateCounter++;
+      }
+
+      reset(initPos) {
+        this.pos.set(initPos);
+        this.dirAng = 0;
+        this.history = [];
+        this.avgPos.set(this.pos);
+        this.updateCounter = 0;
+        this.updateBristlesPos();
+      }
+
+      paint(colors, alpha, minAlpha, gfx) {
+        if (this.history.length === this.historySize &&
+            colors.length === this.nBristles && alpha > 0) {
+          for (let i = 0; i < this.nBristles; i++) {
+            const col = color(colors[i][0], colors[i][1], colors[i][2], alpha);
+            if (alpha > minAlpha) {
+              this.bristles[i].paint(col, gfx);
+            }
+          }
+        }
+      }
+
+      getBristlesPos() {
+        if (this.history.length === this.historySize) {
+          return this.bristlesPos;
+        }
+        return null;
+      }
+    }
+
+    // ============================================================================
+    // TRACE CLASS - Traiettoria pennellata
+    // ============================================================================
+    class Trace {
+      constructor(brush, nSteps, initPos, speed) {
+        this.brush = brush;
+        this.nBristles = brush.nBristles;
+        this.nSteps = max(1, nSteps);
+        this.pos = [];
+        this.alphas = [];
+        this.colors = null;
+
+        this.noiseFactor = 0.007;
+        this.minAlpha = 20;
+        this.mixStart = 5;
+        this.mixStrength = 0.015;
+        this.brightnessChange = 12;
+
+        // Generate trajectory
+        this.pos.push(initPos.copy());
+        this.alphas.push(255);
+
+        const initAng = random(TWO_PI);
+        const noiseSeed = random(1000);
+        let prevAlpha = 255;
+        const alphaDec = min(prevAlpha / nSteps, 25);
+
+        for (let s = 1; s < nSteps; s++) {
+          const ang = initAng + TWO_PI * (noise(noiseSeed + this.noiseFactor * s) - 0.5);
+          const vel = createVector(speed * cos(ang), speed * sin(ang));
+          this.pos.push(p5.Vector.add(this.pos[s-1], vel));
+          prevAlpha = max(0, prevAlpha - alphaDec);
+          this.alphas.push(int(prevAlpha));
+        }
+
+        this.mixStart = constrain(this.mixStart, 1, nSteps);
+      }
+
+      isValid(simCol, visited) {
+        const nRows = simCol.length;
+        const nCols = simCol[0].length;
+        let simCounter = 0, visitCounter = 0, outCounter = 0;
+
+        for (let s = 0; s < this.nSteps; s++) {
+          const row = int(this.pos[s].y);
+          const col = int(this.pos[s].x);
+
+          if (row >= 0 && row < nRows && col >= 0 && col < nCols) {
+            if (simCol[row][col]) simCounter++;
+            if (visited[row][col]) visitCounter++;
+          } else {
+            outCounter++;
+          }
+        }
+
+        return simCounter <= 0.6 * this.nSteps &&
+               visitCounter <= 0.35 * this.nSteps &&
+               outCounter <= 0.6 * this.nSteps;
+      }
+
+      calculateColors(maxDiff, simCol, targetImg, canvasGfx) {
+        this.colors = [];
+        const origColors = [];
+
+        const canvasImg = canvasGfx.get();
+        const nRows = canvasImg.height;
+        const nCols = canvasImg.width;
+
+        canvasImg.loadPixels();
+        targetImg.loadPixels();
+
+        let rAvg = 0, gAvg = 0, bAvg = 0;
+        let inside = 0, simCounter = 0;
+        const simBool = [];
+
+        for (let s = 0; s < this.nSteps; s++) {
+          this.colors.push([]);
+          origColors.push([]);
+          simBool.push([]);
+
+          this.brush.update(this.pos[s]);
+          const bristlesPos = this.brush.getBristlesPos();
+          const highAlpha = this.alphas[s] >= this.minAlpha;
+
+          if (bristlesPos) {
+            for (let b = 0; b < this.nBristles; b++) {
+              const row = int(bristlesPos[b].y);
+              const col = int(bristlesPos[b].x);
+
+              if (row >= 0 && row < nRows && col >= 0 && col < nCols) {
+                const loc = col + row * nCols;
+                const canvasCol = canvasImg.pixels[loc];
+                const targetCol = targetImg.pixels[loc];
+
+                this.colors[s].push([
+                  (canvasCol >> 16) & 0xff,
+                  (canvasCol >> 8) & 0xff,
+                  canvasCol & 0xff
+                ]);
+                origColors[s].push([
+                  (targetCol >> 16) & 0xff,
+                  (targetCol >> 8) & 0xff,
+                  targetCol & 0xff
+                ]);
+
+                if (highAlpha) {
+                  rAvg += (targetCol >> 16) & 0xff;
+                  gAvg += (targetCol >> 8) & 0xff;
+                  bAvg += targetCol & 0xff;
+                  inside++;
+
+                  if (simCol[row][col]) {
+                    simBool[s].push(true);
+                    simCounter++;
+                  } else {
+                    simBool[s].push(false);
+                  }
+                }
+              } else {
+                this.colors[s].push(KEY_COLOR);
+                origColors[s].push(KEY_COLOR);
+                if (highAlpha) simBool[s].push(false);
+              }
+            }
+          }
+        }
+
+        if (inside > 0) {
+          rAvg /= inside;
+          gAvg /= inside;
+          bAvg /= inside;
+        }
+
+        this.brush.reset(this.pos[0]);
+
+        if (simCounter >= 0.85 * inside || inside === 0) {
+          return false;
+        }
+
+        // Set initial colors with brightness variation
+        const hAvg = hue(color(rAvg, gAvg, bAvg));
+        const sAvg = saturation(color(rAvg, gAvg, bAvg));
+        const bAvg = brightness(color(rAvg, gAvg, bAvg));
+
+        colorMode(HSB, 255);
+        for (let b = 0; b < this.nBristles; b++) {
+          const bri = constrain(bAvg + this.brightnessChange * (random() - 0.5), 0, 255);
+          const col = color(hAvg, sAvg, bri);
+          this.colors[0][b] = [red(col), green(col), blue(col)];
+        }
+        colorMode(RGB, 255);
+
+        // Extend to mix start
+        for (let s = 1; s < this.mixStart; s++) {
+          for (let b = 0; b < this.nBristles; b++) {
+            this.colors[s][b] = [...this.colors[s-1][b]];
+          }
+        }
+
+        // Color mixing
+        const rPrev = [], gPrev = [], bPrev = [];
+        for (let b = 0; b < this.nBristles; b++) {
+          rPrev.push(this.colors[this.mixStart-1][b][0]);
+          gPrev.push(this.colors[this.mixStart-1][b][1]);
+          bPrev.push(this.colors[this.mixStart-1][b][2]);
+        }
+
+        for (let s = this.mixStart; s < this.nSteps; s++) {
+          for (let b = 0; b < this.nBristles; b++) {
+            const canvasCol = this.colors[s][b];
+
+            if (canvasCol[0] !== KEY_COLOR[0] || canvasCol[1] !== KEY_COLOR[1] || canvasCol[2] !== KEY_COLOR[2]) {
+              rPrev[b] = (rPrev[b] + this.mixStrength * canvasCol[0]) / (1 + this.mixStrength);
+              gPrev[b] = (gPrev[b] + this.mixStrength * canvasCol[1]) / (1 + this.mixStrength);
+              bPrev[b] = (bPrev[b] + this.mixStrength * canvasCol[2]) / (1 + this.mixStrength);
+              this.colors[s][b] = [int(rPrev[b]), int(gPrev[b]), int(bPrev[b])];
+            } else {
+              this.colors[s][b] = [...this.colors[s-1][b]];
+            }
+          }
+        }
+
+        return true;
+      }
+
+      paint(canvasGfx, visited) {
+        if (!this.colors) return;
+
+        const nRows = visited.length;
+        const nCols = visited[0].length;
+
+        canvasGfx.beginDraw();
+
+        for (let s = 0; s < this.nSteps; s++) {
+          this.brush.update(this.pos[s]);
+          this.brush.paint(this.colors[s], this.alphas[s], this.minAlpha, canvasGfx);
+
+          if (this.alphas[s] > this.minAlpha) {
+            const bristlesPos = this.brush.getBristlesPos();
+            if (bristlesPos) {
+              for (let b = 0; b < this.nBristles; b++) {
+                const row = int(bristlesPos[b].y);
+                const col = int(bristlesPos[b].x);
+                if (row >= 0 && row < nRows && col >= 0 && col < nCols) {
+                  visited[row][col] = true;
+                }
+              }
+            }
+          }
+        }
+
+        canvasGfx.endDraw();
+        this.brush.reset(this.pos[0]);
+      }
+    }
+
+    // ============================================================================
+    // HELPER FUNCTIONS
+    // ============================================================================
+    function populateSimilarColor(maxDiff, simCol, targetImg, canvasGfx) {
+      const canvasImg = canvasGfx.get();
+      canvasImg.loadPixels();
+      targetImg.loadPixels();
+
+      const nRows = canvasImg.height;
+      const nCols = canvasImg.width;
+
+      for (let row = 0; row < nRows; row++) {
+        for (let col = 0; col < nCols; col++) {
+          const loc = col + row * nCols;
+          const canvasCol = canvasImg.pixels[loc];
+          const canvasR = (canvasCol >> 16) & 0xff;
+          const canvasG = (canvasCol >> 8) & 0xff;
+          const canvasB = canvasCol & 0xff;
+
+          const isKey = canvasR === KEY_COLOR[0] && canvasG === KEY_COLOR[1] && canvasB === KEY_COLOR[2];
+
+          if (!isKey) {
+            const targetCol = targetImg.pixels[loc];
+            const targetR = (targetCol >> 16) & 0xff;
+            const targetG = (targetCol >> 8) & 0xff;
+            const targetB = targetCol & 0xff;
+
+            const rDiff = abs(targetR - canvasR);
+            const gDiff = abs(targetG - canvasG);
+            const bDiff = abs(targetB - canvasB);
+
+            simCol[row][col] = (rDiff < maxDiff[0]) && (gDiff < maxDiff[1]) && (bDiff < maxDiff[2]);
+          } else {
+            simCol[row][col] = false;
+          }
+        }
+      }
+    }
+
+    function createMusicalTarget() {
+      const img = createImage(W, H);
+      img.loadPixels();
+
+      // Base: Zorn white
+      for (let i = 0; i < img.pixels.length; i += 4) {
+        img.pixels[i] = ZORN.white[0];
+        img.pixels[i+1] = ZORN.white[1];
+        img.pixels[i+2] = ZORN.white[2];
+        img.pixels[i+3] = 255;
+      }
+
+      // Paint notes
+      for (let note of notes) {
+        const x = map(note.start_time, 0, maxTime, 0, W);
+        const y = map(note.pitch, minPitch, maxPitch, H * 0.8, H * 0.2);
+        const size = map(note.velocity_value, 0.3, 0.8, 15, 50);
+
+        // Color from Zorn palette
+        const pitchNorm = (note.pitch - minPitch) / (maxPitch - minPitch);
+        let col;
+        if (pitchNorm < 0.25) col = ZORN.black;
+        else if (pitchNorm < 0.5) col = ZORN.red;
+        else if (pitchNorm < 0.75) col = ZORN.yellow;
+        else col = ZORN.white;
+
+        // Paint blob
+        for (let dy = -size; dy < size; dy++) {
+          for (let dx = -size; dx < size; dx++) {
+            const dist = sqrt(dx*dx + dy*dy);
+            if (dist < size) {
+              const px = int(x + dx);
+              const py = int(y + dy);
+              if (px >= 0 && px < W && py >= 0 && py < H) {
+                const idx = (px + py * W) * 4;
+                const alpha = map(dist, 0, size, 1, 0);
+                img.pixels[idx] = lerp(img.pixels[idx], col[0], alpha);
+                img.pixels[idx+1] = lerp(img.pixels[idx+1], col[1], alpha);
+                img.pixels[idx+2] = lerp(img.pixels[idx+2], col[2], alpha);
+              }
+            }
+          }
+        }
+      }
+
+      img.updatePixels();
+      return img;
+    }
+
+    // ============================================================================
+    // P5.JS MAIN
+    // ============================================================================
+    function preload() {
+      notes = loadJSON('1207(1)_notes.json');
+    }
+
+    function setup() {
+      createCanvas(W, H).parent('canvasContainer');
+      pixelDensity(1);
+      background(255);
+      noLoop();
+
+      // Convert to array
+      if (notes && !Array.isArray(notes)) {
+        notes = Object.values(notes);
+      }
+
+      if (!notes || notes.length === 0) {
+        console.error('❌ Error loading notes');
+        return;
+      }
+
+      // Find ranges
+      notes.forEach(n => {
+        if (n.pitch < minPitch) minPitch = n.pitch;
+        if (n.pitch > maxPitch) maxPitch = n.pitch;
+        if (n.start_time + n.duration > maxTime) maxTime = n.start_time + n.duration;
+      });
+
+      console.log('🎵 Notes:', notes.length);
+      console.log('📊 Pitch:', minPitch, '-', maxPitch);
+      console.log('⏱️ Duration:', maxTime.toFixed(2), 's');
+
+      document.getElementById('totalNotes').textContent = notes.length;
+
+      // Create target
+      targetImg = createMusicalTarget();
+      console.log('🎨 Musical target created');
+
+      // Create canvas
+      canvas = createGraphics(W, H);
+      canvas.beginDraw();
+      canvas.background(KEY_COLOR[0], KEY_COLOR[1], KEY_COLOR[2]);
+      canvas.strokeCap(SQUARE);
+      canvas.noSmooth();
+      canvas.endDraw();
+
+      // Init arrays
+      for (let row = 0; row < H; row++) {
+        similarColor[row] = [];
+        visitedPixels[row] = [];
+        for (let col = 0; col < W; col++) {
+          similarColor[row][col] = false;
+          visitedPixels[row][col] = false;
+        }
+      }
+
+      brushSize = max(SMALLER_BRUSH, sqrt(W * H) / 6);
+
+      // Setup controls
+      document.getElementById('startBtn').onclick = () => {
+        isPainting = true;
+        needNewTrace = true;
+        frameStart = frameCount;
+        document.getElementById('startBtn').disabled = true;
+        document.getElementById('pauseBtn').disabled = false;
+        loop();
+        console.log('🎨 Painting started');
+      };
+
+      document.getElementById('pauseBtn').onclick = () => {
+        isPainting = false;
+        document.getElementById('startBtn').disabled = false;
+        document.getElementById('pauseBtn').disabled = true;
+        noLoop();
+        console.log('⏸ Paused');
+      };
+
+      document.getElementById('saveBtn').onclick = () => {
+        save(canvas, 'zorn_oil_painting.png');
+        console.log('💾 Saved');
+      };
+
+      updateUI();
+    }
+
+    function draw() {
+      if (!isPainting) return;
+
+      if (needNewTrace) {
+        // Check stop condition
+        const maxInvalid = (brushSize === SMALLER_BRUSH) ? MAX_INVALID_TRACES_SMALL : MAX_INVALID_TRACES;
+
+        if (brushSize === SMALLER_BRUSH && invalidCounter > MAX_INVALID_TRACES_SMALL) {
+          console.log('✅ Painting complete! Traces:', tracesCount);
+          isPainting = false;
+          document.getElementById('startBtn').disabled = false;
+          document.getElementById('pauseBtn').disabled = true;
+          noLoop();
+          return;
+        }
+
+        // Reduce brush size
+        if (brushSize > SMALLER_BRUSH && invalidCounter > MAX_INVALID_TRACES) {
+          brushSize = max(SMALLER_BRUSH, min(brushSize / BRUSH_DECREMENT, brushSize - 2));
+          console.log('📏 Brush size:', brushSize.toFixed(1));
+          invalidCounter = 0;
+
+          // Reset visited
+          for (let row = 0; row < H; row++) {
+            for (let col = 0; col < W; col++) {
+              visitedPixels[row][col] = false;
+            }
+          }
+        }
+
+        // Create trace
+        let valid = false;
+        let attempts = 0;
+
+        while (!valid && attempts < 100) {
+          const initPos = createVector(random(W), random(H));
+          const size = max(SMALLER_BRUSH, brushSize * random(0.95, 1.05));
+          const nBristles = int(size * random(1.6, 1.9));
+          const bristleLen = min(2 * size, 12);
+          const bristleThick = min(0.8 * size, 5);
+          const brush = new Brush(initPos, size, nBristles, bristleLen, bristleThick);
+
+          const nSteps = int(max(MIN_TRACE_LENGTH, (REL_TRACE_LENGTH * size / TRACE_SPEED) * random(0.9, 1.1)));
+          currentTrace = new Trace(brush, nSteps, initPos, TRACE_SPEED);
+
+          valid = currentTrace.isValid(similarColor, visitedPixels);
+          attempts++;
+        }
+
+        if (valid && currentTrace.calculateColors(MAX_COLOR_DIFF, similarColor, targetImg, canvas)) {
+          needNewTrace = false;
+          tracesCount++;
+          invalidCounter = 0;
+        } else {
+          invalidCounter++;
+        }
+
+        updateUI();
+      } else {
+        // Paint trace
+        currentTrace.paint(canvas, visitedPixels);
+        needNewTrace = true;
+        populateSimilarColor(MAX_COLOR_DIFF, similarColor, targetImg, canvas);
+
+        // Draw canvas
+        image(canvas, 0, 0);
+
+        // Update FPS
+        if (frameCount % 30 === 0) {
+          updateUI();
+        }
+      }
+    }
+
+    function updateUI() {
+      document.getElementById('brushSize').textContent = brushSize.toFixed(1);
+      document.getElementById('tracesCount').textContent = tracesCount;
+      document.getElementById('invalidCount').textContent = invalidCounter;
+      const maxInvalid = (brushSize === SMALLER_BRUSH) ? MAX_INVALID_TRACES_SMALL : MAX_INVALID_TRACES;
+      document.getElementById('invalidMax').textContent = maxInvalid;
+      document.getElementById('fps').textContent = Math.round(frameRate());
+    }
+  </script>
+</body>
+</html>
