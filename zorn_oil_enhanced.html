@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zorn Oil Enhanced - Jagracar Algorithm</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.2/p5.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #1a1a1a;
+      color: #fff;
+      font-family: 'Courier New', monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h1 { margin: 10px 0; font-size: 28px; color: #d4a574; }
+    p { margin: 5px 0; color: #aaa; font-size: 13px; }
+
+    #canvasContainer {
+      margin: 20px 0;
+      box-shadow: 0 0 30px rgba(0,0,0,0.5);
+      background: white;
+    }
+
+    #controls {
+      display: flex;
+      gap: 15px;
+      margin: 20px 0;
+      align-items: center;
+    }
+
+    button {
+      padding: 12px 24px;
+      background: #d4a574;
+      border: none;
+      color: #000;
+      cursor: pointer;
+      font-weight: bold;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+    }
+
+    button:hover { background: #e8b88a; }
+    button:disabled { background: #555; cursor: not-allowed; color: #888; }
+
+    #info {
+      background: rgba(255,255,255,0.1);
+      padding: 20px;
+      border-radius: 8px;
+      min-width: 500px;
+      text-align: center;
+    }
+
+    .stat { margin: 8px 0; font-size: 15px; }
+    .stat strong { color: #d4a574; font-size: 16px; }
+    .credits { margin-top: 15px; font-size: 11px; color: #666; }
+  </style>
+</head>
+<body>
+  <h1>🎨 Zorn Oil Painting Enhanced</h1>
+  <p>Enhanced Jagracar algorithm • Melodic flow • Natural bristle variation</p>
+
+  <div id="controls">
+    <button id="startBtn">▶ Start Painting</button>
+    <button id="pauseBtn" disabled>⏸ Pause</button>
+    <button id="saveBtn">💾 Save</button>
+  </div>
+
+  <div id="info">
+    <div class="stat">Note: <strong id="totalNotes">0</strong> | Brush: <strong id="brushSize">--</strong>px</div>
+    <div class="stat">Traces: <strong id="tracesCount">0</strong> | Invalid: <strong id="invalidCount">0</strong>/<strong id="invalidMax">--</strong></div>
+    <div class="stat">FPS: <strong id="fps">0</strong> | Progress: <strong id="progress">0</strong>%</div>
+    <div class="credits">
+      Enhanced algorithm based on Javier Graciá Carpio's technique
+    </div>
+  </div>
+
+  <div id="canvasContainer"></div>
+
+  <script>
+    const W = 1200, H = 800;
+
+    const ZORN = {
+      yellow: [227, 168, 87],
+      red: [198, 45, 37],
+      black: [43, 43, 43],
+      white: [240, 234, 214]
+    };
+
+    const MAX_COLOR_DIFF = [35, 35, 35];
+    const SMALLER_BRUSH = 3;
+    const BRUSH_DECREMENT = 1.25;
+    const MAX_INVALID = 300;
+    const MAX_INVALID_SMALL = 400;
+    const TRACE_SPEED = 2.5;
+    const REL_TRACE_LENGTH = 3.0; // Longer strokes
+    const MIN_TRACE_LENGTH = 12;
+
+    let notes = [];
+    let minPitch = 999, maxPitch = 0, maxTime = 0;
+    let targetImg, paintCanvas;
+    let similarColor = [], visitedPixels = [];
+    let brushSize, invalidCounter = 0, tracesCount = 0;
+    let isPainting = false, needNewTrace = true, currentTrace = null;
+
+    // ============================================================================
+    // ENHANCED BRISTLE - More natural variation
+    // ============================================================================
+    class Bristle {
+      constructor(nParts, initLen, deltaLen, initThick, deltaThick, variation) {
+        this.nPos = max(2, nParts + 1);
+        this.pos = [];
+        this.len = [];
+        this.thick = [];
+
+        for (let i = 0; i < this.nPos; i++) {
+          this.pos.push(createVector(0, 0));
+          // Add variation to create more natural bristles
+          const lenVar = 1 + variation * (random() - 0.5);
+          const thickVar = 1 + variation * 0.5 * (random() - 0.5);
+          this.len.push(max(0.5, (initLen - i * deltaLen) * lenVar));
+          this.thick.push(max(0.1, (initThick - i * deltaThick) * thickVar));
+        }
+      }
+
+      init(p) {
+        for (let i = 0; i < this.nPos; i++) {
+          this.pos[i].set(p);
+        }
+      }
+
+      update(newPos) {
+        this.pos[0].set(newPos);
+        for (let i = 1; i < this.nPos; i++) {
+          const ang = atan2(
+            this.pos[i-1].y - this.pos[i].y,
+            this.pos[i-1].x - this.pos[i].x
+          );
+          this.pos[i].set(
+            this.pos[i-1].x - this.len[i] * cos(ang),
+            this.pos[i-1].y - this.len[i] * sin(ang)
+          );
+        }
+      }
+
+      paint(col, gfx) {
+        gfx.stroke(col);
+        for (let i = 1; i < this.nPos; i++) {
+          gfx.strokeWeight(this.thick[i]);
+          gfx.line(
+            this.pos[i-1].x, this.pos[i-1].y,
+            this.pos[i].x, this.pos[i].y
+          );
+        }
+      }
+    }
+
+    // ============================================================================
+    // ENHANCED BRUSH - Better variation
+    // ============================================================================
+    class Brush {
+      constructor(initPos, size, nBristles, bristleLen, bristleThick) {
+        this.pos = initPos.copy();
+        this.dirAng = 0;
+        this.nBristles = nBristles;
+        this.bristles = [];
+        this.offsets = [];
+        this.bristlesPos = [];
+        this.history = [];
+        this.avgPos = this.pos.copy();
+        this.noiseSeed = random(1000);
+        this.updateCounter = 0;
+
+        this.historySize = 5; // Longer history for smoother direction
+        this.vertNoise = 10;
+        this.horNoise = min(0.35 * size, 5);
+        this.noiseSpeed = 0.03;
+
+        const nParts = max(4, round(sqrt(2 * bristleLen)));
+        const initLen = nParts * 1.2;
+        const deltaLen = 1.1;
+        const initThick = bristleThick;
+        const deltaThick = initThick / nParts;
+        const variation = 0.3; // Add 30% variation between bristles
+
+        for (let i = 0; i < nBristles; i++) {
+          this.bristles.push(new Bristle(nParts, initLen, deltaLen, initThick, deltaThick, variation));
+          this.offsets.push(createVector(
+            size * (random() - 0.5),
+            this.vertNoise * (random() - 0.5)
+          ));
+          this.bristlesPos.push(createVector(0, 0));
+        }
+
+        this.updateBristlesPos();
+      }
+
+      updateBristlesPos() {
+        const c = cos(this.dirAng);
+        const s = sin(this.dirAng);
+
+        for (let i = 0; i < this.nBristles; i++) {
+          const noiseVal = noise(
+            this.noiseSeed + this.noiseSpeed * this.updateCounter,
+            this.noiseSeed + i * 0.1
+          );
+          const x = this.offsets[i].x + this.horNoise * (noiseVal - 0.5);
+          const y = this.offsets[i].y;
+
+          this.bristlesPos[i].set(
+            this.pos.x + (x * c - y * s),
+            this.pos.y + (x * s + y * c)
+          );
+        }
+      }
+
+      update(newPos) {
+        if (newPos.x !== this.pos.x || newPos.y !== this.pos.y) {
+          this.history.push(newPos.copy());
+          if (this.history.length > this.historySize) {
+            this.history.shift();
+          }
+
+          let newAvg = createVector(0, 0);
+          for (let p of this.history) {
+            newAvg.add(p);
+          }
+          newAvg.div(this.history.length);
+
+          this.dirAng = atan2(
+            newAvg.y - this.avgPos.y,
+            newAvg.x - this.avgPos.x
+          );
+          this.dirAng += HALF_PI;
+
+          this.pos.set(newPos);
+          this.avgPos.set(newAvg);
+          this.updateBristlesPos();
+
+          if (this.history.length < this.historySize) {
+            for (let i = 0; i < this.nBristles; i++) {
+              this.bristles[i].init(this.bristlesPos[i]);
+            }
+          } else {
+            for (let i = 0; i < this.nBristles; i++) {
+              this.bristles[i].update(this.bristlesPos[i]);
+            }
+          }
+        }
+
+        this.updateCounter++;
+      }
+
+      reset(initPos) {
+        this.pos.set(initPos);
+        this.dirAng = 0;
+        this.history = [];
+        this.avgPos.set(this.pos);
+        this.updateCounter = 0;
+        this.updateBristlesPos();
+      }
+
+      paint(colors, alpha, minAlpha, gfx) {
+        if (this.history.length === this.historySize &&
+            colors.length === this.nBristles && alpha > 0) {
+          for (let i = 0; i < this.nBristles; i++) {
+            // Apply alpha gradient for more natural stroke
+            const bristleAlpha = alpha * (0.7 + 0.3 * random());
+            const col = color(colors[i][0], colors[i][1], colors[i][2], bristleAlpha);
+            if (bristleAlpha > minAlpha) {
+              this.bristles[i].paint(col, gfx);
+            }
+          }
+        }
+      }
+
+      getBristlesPos() {
+        if (this.history.length === this.historySize) {
+          return this.bristlesPos;
+        }
+        return null;
+      }
+    }
+
+    // ============================================================================
+    // ENHANCED TRACE - Follows melodic contour
+    // ============================================================================
+    class Trace {
+      constructor(brush, nSteps, initPos, speed, targetImg, notes) {
+        this.brush = brush;
+        this.nBristles = brush.nBristles;
+        this.nSteps = max(1, nSteps);
+        this.pos = [];
+        this.alphas = [];
+        this.colors = null;
+
+        this.minAlpha = 15;
+        this.mixStart = 6;
+        this.mixStrength = 0.02;
+        this.brightnessChange = 15;
+
+        // Generate trajectory following musical flow
+        this.pos.push(initPos.copy());
+        this.alphas.push(255);
+
+        // Find nearby notes to guide direction
+        const nearbyNotes = this.findNearbyNotes(initPos, notes);
+        let currentAng = random(TWO_PI);
+
+        if (nearbyNotes.length > 0) {
+          // Initial angle toward musical content
+          const target = nearbyNotes[0];
+          const tx = map(target.start_time, 0, maxTime, 0, W);
+          const ty = map(target.pitch, minPitch, maxPitch, H * 0.8, H * 0.2);
+          currentAng = atan2(ty - initPos.y, tx - initPos.x);
+        }
+
+        let prevAlpha = 255;
+        const alphaDec = min(prevAlpha / nSteps, 20);
+        const momentum = 0.75; // Smoother curves
+
+        for (let s = 1; s < nSteps; s++) {
+          // Gradual angle change for fluid strokes
+          const angleChange = random(-0.2, 0.2);
+          currentAng = currentAng * momentum + (currentAng + angleChange) * (1 - momentum);
+
+          const vel = createVector(speed * cos(currentAng), speed * sin(currentAng));
+          this.pos.push(p5.Vector.add(this.pos[s-1], vel));
+          prevAlpha = max(0, prevAlpha - alphaDec);
+          this.alphas.push(int(prevAlpha));
+        }
+
+        this.mixStart = constrain(this.mixStart, 1, nSteps);
+      }
+
+      findNearbyNotes(pos, notes) {
+        const nearby = [];
+        const searchRadius = 100;
+
+        for (let note of notes) {
+          const nx = map(note.start_time, 0, maxTime, 0, W);
+          const ny = map(note.pitch, minPitch, maxPitch, H * 0.8, H * 0.2);
+          const d = dist(pos.x, pos.y, nx, ny);
+
+          if (d < searchRadius) {
+            nearby.push(note);
+          }
+        }
+
+        return nearby.sort((a, b) => {
+          const da = dist(pos.x, pos.y,
+            map(a.start_time, 0, maxTime, 0, W),
+            map(a.pitch, minPitch, maxPitch, H * 0.8, H * 0.2)
+          );
+          const db = dist(pos.x, pos.y,
+            map(b.start_time, 0, maxTime, 0, W),
+            map(b.pitch, minPitch, maxPitch, H * 0.8, H * 0.2)
+          );
+          return da - db;
+        });
+      }
+
+      isValid(simCol, visited) {
+        const nRows = simCol.length;
+        const nCols = simCol[0].length;
+        let simCounter = 0, visitCounter = 0, outCounter = 0;
+
+        for (let s = 0; s < this.nSteps; s++) {
+          const row = int(this.pos[s].y);
+          const col = int(this.pos[s].x);
+
+          if (row >= 0 && row < nRows && col >= 0 && col < nCols) {
+            if (simCol[row][col]) simCounter++;
+            if (visited[row][col]) visitCounter++;
+          } else {
+            outCounter++;
+          }
+        }
+
+        return simCounter <= 0.65 * this.nSteps &&
+               visitCounter <= 0.4 * this.nSteps &&
+               outCounter <= 0.5 * this.nSteps;
+      }
+
+      calculateColors(maxDiff, simCol, targetImg, canvasGfx) {
+        this.colors = [];
+        const origColors = [];
+
+        const canvasImg = canvasGfx.get();
+        const nRows = canvasImg.height;
+        const nCols = canvasImg.width;
+
+        canvasImg.loadPixels();
+        targetImg.loadPixels();
+
+        let rAvg = 0, gAvg = 0, bAvg = 0;
+        let inside = 0, simCounter = 0;
+
+        for (let s = 0; s < this.nSteps; s++) {
+          this.colors.push([]);
+          origColors.push([]);
+
+          this.brush.update(this.pos[s]);
+          const bristlesPos = this.brush.getBristlesPos();
+          const highAlpha = this.alphas[s] >= this.minAlpha;
+
+          if (bristlesPos) {
+            for (let b = 0; b < this.nBristles; b++) {
+              const row = int(bristlesPos[b].y);
+              const col = int(bristlesPos[b].x);
+
+              if (row >= 0 && row < nRows && col >= 0 && col < nCols) {
+                const loc = col + row * nCols;
+                const canvasCol = canvasImg.pixels[loc];
+                const targetCol = targetImg.pixels[loc];
+
+                this.colors[s].push([
+                  (canvasCol >> 16) & 0xff,
+                  (canvasCol >> 8) & 0xff,
+                  canvasCol & 0xff
+                ]);
+                origColors[s].push([
+                  (targetCol >> 16) & 0xff,
+                  (targetCol >> 8) & 0xff,
+                  targetCol & 0xff
+                ]);
+
+                if (highAlpha) {
+                  rAvg += (targetCol >> 16) & 0xff;
+                  gAvg += (targetCol >> 8) & 0xff;
+                  bAvg += targetCol & 0xff;
+                  inside++;
+
+                  if (simCol[row][col]) simCounter++;
+                }
+              } else {
+                this.colors[s].push([255, 0, 255]);
+                origColors[s].push([255, 0, 255]);
+              }
+            }
+          }
+        }
+
+        if (inside > 0) {
+          rAvg /= inside;
+          gAvg /= inside;
+          bAvg /= inside;
+        }
+
+        this.brush.reset(this.pos[0]);
+
+        if (simCounter >= 0.80 * inside || inside === 0) {
+          return false;
+        }
+
+        // Enhanced color variation
+        const hAvg = hue(color(rAvg, gAvg, bAvg));
+        const sAvg = saturation(color(rAvg, gAvg, bAvg));
+        const briAvg = brightness(color(rAvg, gAvg, bAvg));
+
+        colorMode(HSB, 255);
+        for (let b = 0; b < this.nBristles; b++) {
+          const bri = constrain(briAvg + this.brightnessChange * (random() - 0.5), 0, 255);
+          const sat = constrain(sAvg + 10 * (random() - 0.5), 0, 255);
+          const col = color(hAvg, sat, bri);
+          this.colors[0][b] = [red(col), green(col), blue(col)];
+        }
+        colorMode(RGB, 255);
+
+        for (let s = 1; s < this.mixStart; s++) {
+          for (let b = 0; b < this.nBristles; b++) {
+            this.colors[s][b] = [...this.colors[s-1][b]];
+          }
+        }
+
+        // Enhanced color mixing
+        const rPrev = [], gPrev = [], bPrev = [];
+        for (let b = 0; b < this.nBristles; b++) {
+          rPrev.push(this.colors[this.mixStart-1][b][0]);
+          gPrev.push(this.colors[this.mixStart-1][b][1]);
+          bPrev.push(this.colors[this.mixStart-1][b][2]);
+        }
+
+        for (let s = this.mixStart; s < this.nSteps; s++) {
+          for (let b = 0; b < this.nBristles; b++) {
+            const canvasCol = this.colors[s][b];
+
+            if (canvasCol[0] !== 255 || canvasCol[1] !== 0 || canvasCol[2] !== 255) {
+              rPrev[b] = (rPrev[b] + this.mixStrength * canvasCol[0]) / (1 + this.mixStrength);
+              gPrev[b] = (gPrev[b] + this.mixStrength * canvasCol[1]) / (1 + this.mixStrength);
+              bPrev[b] = (bPrev[b] + this.mixStrength * canvasCol[2]) / (1 + this.mixStrength);
+              this.colors[s][b] = [int(rPrev[b]), int(gPrev[b]), int(bPrev[b])];
+            } else {
+              this.colors[s][b] = [...this.colors[s-1][b]];
+            }
+          }
+        }
+
+        return true;
+      }
+
+      paint(canvasGfx, visited) {
+        if (!this.colors) return;
+
+        const nRows = visited.length;
+        const nCols = visited[0].length;
+
+        for (let s = 0; s < this.nSteps; s++) {
+          this.brush.update(this.pos[s]);
+          this.brush.paint(this.colors[s], this.alphas[s], this.minAlpha, canvasGfx);
+
+          if (this.alphas[s] > this.minAlpha) {
+            const bristlesPos = this.brush.getBristlesPos();
+            if (bristlesPos) {
+              for (let b = 0; b < this.nBristles; b++) {
+                const row = int(bristlesPos[b].y);
+                const col = int(bristlesPos[b].x);
+                if (row >= 0 && row < nRows && col >= 0 && col < nCols) {
+                  visited[row][col] = true;
+                }
+              }
+            }
+          }
+        }
+
+        this.brush.reset(this.pos[0]);
+      }
+    }
+
+    // ============================================================================
+    // ENHANCED MUSICAL TARGET - Continuous melodic lines
+    // ============================================================================
+    function createEnhancedTarget() {
+      const img = createImage(W, H);
+      img.loadPixels();
+
+      for (let i = 0; i < img.pixels.length; i += 4) {
+        img.pixels[i] = ZORN.white[0];
+        img.pixels[i+1] = ZORN.white[1];
+        img.pixels[i+2] = ZORN.white[2];
+        img.pixels[i+3] = 255;
+      }
+
+      // Draw continuous melodic lines instead of blobs
+      for (let i = 0; i < notes.length - 1; i++) {
+        const n1 = notes[i];
+        const n2 = notes[i + 1];
+
+        const x1 = map(n1.start_time, 0, maxTime, 0, W);
+        const y1 = map(n1.pitch, minPitch, maxPitch, H * 0.8, H * 0.2);
+        const x2 = map(n2.start_time, 0, maxTime, 0, W);
+        const y2 = map(n2.pitch, minPitch, maxPitch, H * 0.8, H * 0.2);
+
+        const size = map(n1.velocity_value, 0.3, 0.8, 20, 60);
+
+        // Color from pitch
+        const pitchNorm = (n1.pitch - minPitch) / (maxPitch - minPitch);
+        let col;
+        if (pitchNorm < 0.25) col = ZORN.black;
+        else if (pitchNorm < 0.5) col = ZORN.red;
+        else if (pitchNorm < 0.75) col = ZORN.yellow;
+        else col = ZORN.white;
+
+        // Draw line with gradient thickness
+        const steps = int(dist(x1, y1, x2, y2) / 2);
+        for (let s = 0; s <= steps; s++) {
+          const t = s / steps;
+          const x = lerp(x1, x2, t);
+          const y = lerp(y1, y2, t);
+          const sz = size * (0.7 + 0.3 * sin(t * PI));
+
+          // Paint circle with soft edges
+          for (let dy = -sz; dy < sz; dy++) {
+            for (let dx = -sz; dx < sz; dx++) {
+              const dist = sqrt(dx*dx + dy*dy);
+              if (dist < sz) {
+                const px = int(x + dx);
+                const py = int(y + dy);
+                if (px >= 0 && px < W && py >= 0 && py < H) {
+                  const idx = (px + py * W) * 4;
+                  const alpha = map(dist, 0, sz, 1, 0);
+                  img.pixels[idx] = lerp(img.pixels[idx], col[0], alpha);
+                  img.pixels[idx+1] = lerp(img.pixels[idx+1], col[1], alpha);
+                  img.pixels[idx+2] = lerp(img.pixels[idx+2], col[2], alpha);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      img.updatePixels();
+      return img;
+    }
+
+    function populateSimilarColor(maxDiff, simCol, targetImg, canvasGfx) {
+      const canvasImg = canvasGfx.get();
+      canvasImg.loadPixels();
+      targetImg.loadPixels();
+
+      const nRows = canvasImg.height;
+      const nCols = canvasImg.width;
+
+      for (let row = 0; row < nRows; row++) {
+        for (let col = 0; col < nCols; col++) {
+          const loc = col + row * nCols;
+          const canvasCol = canvasImg.pixels[loc];
+          const targetCol = targetImg.pixels[loc];
+
+          const canvasR = (canvasCol >> 16) & 0xff;
+          const canvasG = (canvasCol >> 8) & 0xff;
+          const canvasB = canvasCol & 0xff;
+
+          const targetR = (targetCol >> 16) & 0xff;
+          const targetG = (targetCol >> 8) & 0xff;
+          const targetB = targetCol & 0xff;
+
+          const rDiff = abs(targetR - canvasR);
+          const gDiff = abs(targetG - canvasG);
+          const bDiff = abs(targetB - canvasB);
+
+          simCol[row][col] = (rDiff < maxDiff[0]) && (gDiff < maxDiff[1]) && (bDiff < maxDiff[2]);
+        }
+      }
+    }
+
+    // ============================================================================
+    // MAIN
+    // ============================================================================
+    function preload() {
+      notes = loadJSON('1207(1)_notes.json');
+    }
+
+    function setup() {
+      createCanvas(W, H).parent('canvasContainer');
+      pixelDensity(1);
+      background(255);
+      noLoop();
+
+      if (notes && !Array.isArray(notes)) {
+        notes = Object.values(notes);
+      }
+
+      if (!notes || notes.length === 0) {
+        console.error('❌ Error loading notes');
+        return;
+      }
+
+      notes.forEach(n => {
+        if (n.pitch < minPitch) minPitch = n.pitch;
+        if (n.pitch > maxPitch) maxPitch = n.pitch;
+        if (n.start_time + n.duration > maxTime) maxTime = n.start_time + n.duration;
+      });
+
+      console.log('🎵 Notes:', notes.length);
+      document.getElementById('totalNotes').textContent = notes.length;
+
+      targetImg = createEnhancedTarget();
+      console.log('🎨 Enhanced musical target created');
+
+      paintCanvas = createGraphics(W, H);
+      paintCanvas.background(ZORN.white[0], ZORN.white[1], ZORN.white[2]);
+      paintCanvas.strokeCap(SQUARE);
+      paintCanvas.noSmooth();
+
+      for (let row = 0; row < H; row++) {
+        similarColor[row] = [];
+        visitedPixels[row] = [];
+        for (let col = 0; col < W; col++) {
+          similarColor[row][col] = false;
+          visitedPixels[row][col] = false;
+        }
+      }
+
+      brushSize = max(SMALLER_BRUSH, sqrt(W * H) / 7);
+
+      document.getElementById('startBtn').onclick = () => {
+        isPainting = true;
+        needNewTrace = true;
+        document.getElementById('startBtn').disabled = true;
+        document.getElementById('pauseBtn').disabled = false;
+        loop();
+        console.log('🎨 Painting started');
+      };
+
+      document.getElementById('pauseBtn').onclick = () => {
+        isPainting = false;
+        document.getElementById('startBtn').disabled = false;
+        document.getElementById('pauseBtn').disabled = true;
+        noLoop();
+        console.log('⏸ Paused');
+      };
+
+      document.getElementById('saveBtn').onclick = () => {
+        save(paintCanvas, 'zorn_enhanced.png');
+        console.log('💾 Saved');
+      };
+
+      updateUI();
+    }
+
+    function draw() {
+      if (!isPainting) return;
+
+      if (needNewTrace) {
+        const maxInvalid = (brushSize === SMALLER_BRUSH) ? MAX_INVALID_SMALL : MAX_INVALID;
+
+        if (brushSize === SMALLER_BRUSH && invalidCounter > MAX_INVALID_SMALL) {
+          console.log('✅ Complete! Traces:', tracesCount);
+          isPainting = false;
+          document.getElementById('startBtn').disabled = false;
+          document.getElementById('pauseBtn').disabled = true;
+          noLoop();
+          return;
+        }
+
+        if (brushSize > SMALLER_BRUSH && invalidCounter > MAX_INVALID) {
+          brushSize = max(SMALLER_BRUSH, min(brushSize / BRUSH_DECREMENT, brushSize - 2));
+          console.log('📏 Brush:', brushSize.toFixed(1));
+          invalidCounter = 0;
+
+          for (let row = 0; row < H; row++) {
+            for (let col = 0; col < W; col++) {
+              visitedPixels[row][col] = false;
+            }
+          }
+        }
+
+        let valid = false;
+        let attempts = 0;
+
+        while (!valid && attempts < 100) {
+          const initPos = createVector(random(W), random(H));
+          const size = max(SMALLER_BRUSH, brushSize * random(0.9, 1.1));
+          const nBristles = int(size * random(1.5, 2.0));
+          const bristleLen = min(2.5 * size, 15);
+          const bristleThick = min(0.9 * size, 6);
+          const brush = new Brush(initPos, size, nBristles, bristleLen, bristleThick);
+
+          const nSteps = int(max(MIN_TRACE_LENGTH, (REL_TRACE_LENGTH * size / TRACE_SPEED) * random(0.8, 1.2)));
+          currentTrace = new Trace(brush, nSteps, initPos, TRACE_SPEED, targetImg, notes);
+
+          valid = currentTrace.isValid(similarColor, visitedPixels);
+          attempts++;
+        }
+
+        if (valid && currentTrace.calculateColors(MAX_COLOR_DIFF, similarColor, targetImg, paintCanvas)) {
+          needNewTrace = false;
+          tracesCount++;
+          invalidCounter = 0;
+        } else {
+          invalidCounter++;
+        }
+
+        updateUI();
+      } else {
+        currentTrace.paint(paintCanvas, visitedPixels);
+        needNewTrace = true;
+        populateSimilarColor(MAX_COLOR_DIFF, similarColor, targetImg, paintCanvas);
+
+        image(paintCanvas, 0, 0);
+
+        if (frameCount % 30 === 0) {
+          updateUI();
+        }
+      }
+    }
+
+    function updateUI() {
+      document.getElementById('brushSize').textContent = brushSize.toFixed(1);
+      document.getElementById('tracesCount').textContent = tracesCount;
+      document.getElementById('invalidCount').textContent = invalidCounter;
+      const maxInvalid = (brushSize === SMALLER_BRUSH) ? MAX_INVALID_SMALL : MAX_INVALID;
+      document.getElementById('invalidMax').textContent = maxInvalid;
+      document.getElementById('fps').textContent = Math.round(frameRate());
+
+      // Calculate progress
+      const totalPixels = W * H;
+      let similarPixels = 0;
+      for (let row = 0; row < H; row++) {
+        for (let col = 0; col < W; col++) {
+          if (similarColor[row][col]) similarPixels++;
+        }
+      }
+      const progress = Math.round(100 * similarPixels / totalPixels);
+      document.getElementById('progress').textContent = progress;
+    }
+  </script>
+</body>
+</html>
