@@ -77,6 +77,18 @@ class Bristle:
         for i in range(self.n):
             self.pos[i] = pos.copy()
 
+    def reset_directed(self, pos: np.ndarray, movement_ang: float):
+        """Pre-estende la catena nella direzione OPPOSTA al movimento.
+        Elimina il curl iniziale di srotolamento (tentacle bug)."""
+        trail_cos = math.cos(movement_ang + math.pi)
+        trail_sin = math.sin(movement_ang + math.pi)
+        cumlen = 0.0
+        for i in range(self.n):
+            self.pos[i] = pos + np.array([cumlen * trail_cos,
+                                           cumlen * trail_sin])
+            if i < self.n - 1:
+                cumlen += self.lengths[i + 1]
+
     def update(self, new_pos: np.ndarray):
         self.pos[0] = new_pos.copy()
         for i in range(1, self.n):
@@ -170,6 +182,19 @@ class Brush:
         self.counter = 0
         self._update_bpos()
 
+    def reset_directed(self, init_pos: np.ndarray, movement_ang: float):
+        """Reset con catena pre-orientata nella direzione movement_ang.
+        Pre-popola history → is_ready() True immediatamente → no warmup gap.
+        Ogni bristle parte già estesa → no curl iniziale."""
+        self.pos     = init_pos.copy()
+        self.dir     = movement_ang + math.pi / 2   # perp. al movimento
+        self.history = [init_pos.copy() for _ in range(self.N_AVG)]
+        self.avg_pos = init_pos.copy()
+        self.counter = 0
+        self._update_bpos()
+        for b in range(self.n):
+            self.bristles[b].reset_directed(self.b_pos[b], movement_ang)
+
     def is_ready(self) -> bool:
         return len(self.history) >= self.N_AVG
 
@@ -199,9 +224,9 @@ class Trace:
       MIX_STR  = 0.015         → wet-paint mixing col canvas sottostante
       NOISE_AMP= 0.30          → variazione angolare moderata (≤54°)
     """
-    SPEED     = 3.0
+    SPEED     = 1.5      # px/step più lento → catena IK più stabile
     NOISE_F   = 0.007
-    NOISE_AMP = 0.30     # radiani di deviazione max per step
+    NOISE_AMP = 0.07     # ≤12° deviazione → pennellate quasi dritte
     MIX_START = 5
     MIX_STR   = 0.015
     BRIGHT_CH = 14
@@ -281,7 +306,14 @@ class Trace:
     def paint(self, canvas: Image.Image, canvas_arr: np.ndarray):
         overlay = Image.new('RGBA', canvas.size, (0, 0, 0, 0))
         draw    = ImageDraw.Draw(overlay)
-        self.brush.reset(self.positions[0])
+        # Calcola direzione iniziale dalla traiettoria
+        if len(self.positions) > 1:
+            dp       = self.positions[1] - self.positions[0]
+            init_ang = math.atan2(dp[1], dp[0])
+        else:
+            init_ang = 0.0
+        # Pre-orienta la catena → elimina curl di srotolamento
+        self.brush.reset_directed(self.positions[0], init_ang)
         for s in range(self.n_steps):
             self.brush.update(self.positions[s])
             if (self.colors and s < len(self.colors)
@@ -307,7 +339,7 @@ class ZornRiffBristlePainting:
         random.seed(seed)
         np.random.seed(seed)
 
-        bg = ZORN['ochre'] + (255,)
+        bg = zorn_blend(ZORN['ochre'], ZORN['white'], 0.28) + (255,)
         self.canvas = Image.new('RGBA', (width, height), bg)
         self.arr    = np.array(self.canvas)
 
