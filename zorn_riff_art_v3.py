@@ -350,25 +350,22 @@ class ZornRiffBristlePainting:
         Imprimitura: 36 pennellate orizzontali di varianti ochre a media alpha.
         Crea la textura di base della tela preparata.
         """
+        # (color_tuple, n_strokes, size_lo, size_hi, alpha_scale, ang_sigma)
         configs = [
-            # (t_white, t_black, n_strokes, size_lo, size_hi, alpha_scale)
-            (0.06, 0.00, 12, 22, 50, 0.58),   # ochre chiara
-            (0.00, 0.10, 12, 16, 36, 0.52),   # ochre scura
-            (0.03, 0.03, 12, 12, 26, 0.42),   # ochre media
+            (zorn_blend(ZORN['ochre'], ZORN['white'],     0.08), 14, 24, 55, 0.70, 0.15),
+            (zorn_blend(ZORN['ochre'], ZORN['black'],     0.12), 14, 18, 40, 0.65, 0.18),
+            (zorn_blend(ZORN['ochre'], ZORN['vermilion'], 0.06), 10, 14, 32, 0.55, 0.20),
+            (zorn_blend(ZORN['ochre'], ZORN['black'],     0.06),  8, 10, 22, 0.50, 0.25),
         ]
-        for t_w, t_b, n, sz_lo, sz_hi, a_sc in configs:
-            base = ZORN['ochre']
-            col  = zorn_blend(base, ZORN['white'], t_w) if t_w > 0 \
-                else zorn_blend(base, ZORN['black'], t_b)
+        for col, n, sz_lo, sz_hi, a_sc, ang_sig in configs:
             for _ in range(n):
-                x    = random.uniform(-100, self.W + 100)
-                y    = random.uniform(-100, self.H + 100)
-                ang  = random.gauss(0, 0.14)
+                x    = random.uniform(-120, self.W + 120)
+                y    = random.uniform(-120, self.H + 120)
+                ang  = random.gauss(0, ang_sig)
                 size = random.uniform(sz_lo, sz_hi)
-                # n_steps grande: pennellate lunghe per coprire canvas
-                n_st = max(100, int(random.uniform(180, 280)))
+                n_st = max(120, int(random.uniform(200, 320)))
                 self._paint_one(np.array([x, y], dtype=float),
-                                size, n_st, col, 'mf',
+                                size, n_st, col, 'f',
                                 ang=ang, alpha_scale=a_sc)
 
     # ── mapping tecnica → elenco pennellate ───────────────────────────────
@@ -394,79 +391,77 @@ class ZornRiffBristlePainting:
         else:
             ang_next = 0.0
 
-        # Helper per generare n tracce in ventaglio attorno a center_ang
-        def fan(n: int, center: Optional[float], spread: float,
-                sm: float = 1.0, asc: float = 1.0, steps_mult: float = 1.0):
-            result = []
-            for _ in range(n):
-                a = (center + random.gauss(0, spread)) if center is not None \
-                    else random.uniform(0, 2 * math.pi)
-                result.append((max(80, int(n_st * steps_mult)), a, sm, asc))
-            return result
+        # ── helpers ───────────────────────────────────────────────────────
+        def directed(n: int, primary: float, spread: float,
+                     sm: float = 1.0, asc: float = 1.0, st_mult: float = 1.0):
+            """N tracce che scorrono nella direzione primary ± spread gaussiano.
+            Produce FLOW direzionale (non esplosione radiale)."""
+            return [(max(80, int(n_st * st_mult)),
+                     primary + random.gauss(0, spread),
+                     sm, asc)
+                    for _ in range(n)]
+
+        def burst(n_per_ray: int, angles_deg: List[float],
+                  sm: float = 0.5, asc: float = 0.75, st_mult: float = 0.45):
+            """Burst radiale per tecniche a irradiazione (tapping, harmonics)."""
+            return [t for a in angles_deg
+                    for t in directed(n_per_ray, math.radians(a),
+                                      math.pi / 12, sm, asc, st_mult)]
 
         # ── tecniche ──────────────────────────────────────────────────────
         if tech == 'staccato':
-            # Colpi brevi radiali: pennellate corte in tutte le direzioni
-            return fan(20, None, math.pi, 0.9, 0.90, 0.55)
+            # Colpi brevi, direzione prevalentemente in avanti con ampio spread
+            return directed(22, 0.0, math.pi / 2, 0.9, 0.88, 0.52)
 
         elif tech == 'legato':
-            # Pennellate lunghe verso la nota successiva
-            return (fan(14, ang_next, math.pi / 5, 1.0, 1.0, 1.0)
-                    + fan(8,  ang_next, math.pi / 3, 0.7, 0.75, 0.7))
+            # Scorrono verso la nota successiva (direzione musicale)
+            return (directed(15, ang_next, math.pi / 6, 1.0, 1.00)
+                    + directed(9, ang_next, math.pi / 4, 0.7, 0.75, 0.75))
 
         elif tech == 'slide':
-            # Diagonale ascendente ~20°, ventaglio stretto
-            ang_slide = math.radians(-20)
-            return (fan(15, ang_slide, math.pi / 6, 1.0, 1.0, 1.0)
-                    + fan(8,  ang_slide, math.pi / 4, 0.7, 0.70, 0.7))
+            # Diagonale ~-20° (pennellata che "scivola" in salita)
+            return directed(23, math.radians(-20), math.pi / 6, 1.0, 1.00)
 
         elif tech == 'bend':
-            # Curvatura verso l'alto, ventaglio moderato
-            return (fan(12, math.radians(-70), math.pi / 5, 1.0, 1.0, 1.0)
-                    + fan(10, math.radians(-55), math.pi / 3, 0.7, 0.80, 0.8))
+            # Prevalentemente verso l'alto (corda "tirata")
+            return (directed(14, math.radians(-65), math.pi / 5, 1.0, 1.00)
+                    + directed(9,  math.radians(-45), math.pi / 4, 0.7, 0.80, 0.8))
 
         elif tech == 'vibrato':
-            # Oscillazione: ventaglio ampio ± orizzontale
-            return (fan(10, math.radians(85),  math.pi / 6, 0.8, 0.90, 1.0)
-                    + fan(10, math.radians(-85), math.pi / 6, 0.8, 0.90, 1.0)
-                    + fan(8,  math.radians(80),  math.pi / 5, 0.6, 0.65, 0.7))
+            # Due flussi opposti che si scontrano (oscillazione)
+            return (directed(12, math.radians(88),  math.pi / 6, 0.85, 0.90)
+                    + directed(12, math.radians(-88), math.pi / 6, 0.85, 0.90)
+                    + directed(6,  0.0,               math.pi / 4, 0.60, 0.65, 0.7))
 
         elif tech == 'hammer_on':
-            # Due burst ravvicinati
-            return (fan(13, None, math.pi / 2, 1.0, 1.0, 0.6)
-                    + fan(10, None, math.pi / 2, 0.7, 0.80, 0.5))
+            # Flusso rightward con spread moderato (colpo in avanti)
+            return directed(24, 0.0, math.pi / 3, 1.0, 0.90, 0.58)
 
         elif tech == 'powerchord':
-            # Tre strati orizzontali molto larghi (accordo potente)
-            return (fan(12, math.radians(0), math.pi / 8, 1.3, 1.0, 1.1)
-                    + fan(10, math.radians(0), math.pi / 6, 1.0, 0.80, 1.0)
-                    + fan(8,  math.radians(0), math.pi / 5, 0.8, 0.60, 0.8))
+            # Tre strati orizzontali (accordo largo e piatto)
+            return (directed(13, 0.0, math.pi / 8, 1.3, 1.00, 1.10)
+                    + directed(10, 0.0, math.pi / 6, 1.0, 0.82, 1.00)
+                    + directed(8,  0.0, math.pi / 5, 0.8, 0.62, 0.90))
 
         elif tech == 'tapping':
-            # Raggi radiali a 6 direzioni, brevi
-            return [t for ang in [0, 60, 120, 180, 240, 300]
-                    for t in fan(4, math.radians(ang), math.pi / 8,
-                                 0.65, 0.85, 0.45)]
+            # Burst radiale breve (le dita che picchiano → anelli di luce)
+            return burst(4, [0, 60, 120, 180, 240, 300], 0.62, 0.82, 0.44)
 
         elif tech == 'dive':
-            # Discendente con ventaglio verso il basso
-            return (fan(14, math.radians(75), math.pi / 5, 1.0, 1.0, 1.1)
-                    + fan(10, math.radians(80), math.pi / 4, 0.7, 0.70, 0.8))
+            # Flusso verso il basso (whammy bar che affonda)
+            return (directed(15, math.radians(72), math.pi / 5, 1.0, 1.00, 1.1)
+                    + directed(10, math.radians(80), math.pi / 4, 0.7, 0.70, 0.9))
 
         elif tech == 'harmonic_natural':
-            # Tre raggi leggeri ed eterei
-            return [t for ang in [30, 150, 270]
-                    for t in fan(8, math.radians(ang), math.pi / 5,
-                                 0.55, 0.60, 1.0)]
+            # Tre raggi eterei a 120° (alone radiale leggero)
+            return burst(8, [30, 150, 270], 0.55, 0.58, 1.0)
 
         elif tech == 'harmonic_artificial':
-            # 6 scintille radiali brevi e affilate
-            return [t for ang in [0, 60, 120, 180, 240, 300]
-                    for t in fan(4, math.radians(ang), math.pi / 10,
-                                 0.45, 0.80, 0.40)]
+            # 8 scintille radiali brevi (pinch harmonic aggressivo)
+            return burst(3, [0, 45, 90, 135, 180, 225, 270, 315], 0.45, 0.78, 0.40)
 
         else:
-            return fan(22, None, math.pi / 2, 1.0, 1.0, 1.0)
+            return directed(22, 0.0, math.pi / 3, 1.0, 1.0)
 
     # ── riff painting ─────────────────────────────────────────────────────
     def paint_riff(self, notes: List[Dict]):
@@ -480,10 +475,11 @@ class ZornRiffBristlePainting:
                   f"  {len(traces)} tracce × ~{traces[0][0]} step")
 
             for n_steps, ang, sm, asc in traces:
-                size   = base_sz * sm
-                # Spread spaziale dal centro della nota (proporzionale alla size)
-                jitter = np.array([random.gauss(0, size * 1.2),
-                                   random.gauss(0, size * 1.2)])
+                size = base_sz * sm
+                # Spread ampio: le tracce partono da una zona attorno al centro,
+                # non tutte dallo stesso punto → no pattern a ragno
+                jitter = np.array([random.gauss(0, 110),   # ±110 px orizzontale
+                                   random.gauss(0, 75)])    # ±75 px verticale
                 self._paint_one(center + jitter, size, n_steps,
                                 color, note['velocity'],
                                 ang=ang, alpha_scale=asc)
