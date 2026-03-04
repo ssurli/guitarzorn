@@ -238,19 +238,21 @@ class Trace:
                  init_pos: np.ndarray,
                  note_color: Tuple[int, int, int],
                  velocity: str,
-                 preferred_ang: Optional[float] = None):
+                 preferred_ang: Optional[float] = None,
+                 ang_vel: float = 0.0):
         self.brush      = brush
         self.n_steps    = max(Brush.N_AVG + 10, n_steps)   # MINIMO sempre sopra warmup
         self.note_color = note_color
         self.colors: Optional[List[List[Tuple]]] = None
 
-        # ── Traiettoria: random walk angolare attorno a preferred_ang ──────
+        # ── Traiettoria: random walk angolare (ang_vel≠0 → arco/curva) ──────
         seed = random.uniform(0, 1000)
         ang  = preferred_ang if preferred_ang is not None \
             else random.gauss(0.0, math.pi / 3)   # bias verso destra
         pos  = init_pos.copy()
         self.positions = [pos.copy()]
         for s in range(1, self.n_steps):
+            ang  += ang_vel   # rotazione progressiva → 0 = dritto, ≠0 = arco
             drift = self.NOISE_AMP * math.pi * (_snoise(seed + self.NOISE_F * s) - 0.5)
             a     = ang + drift
             pos   = pos + np.array([self.SPEED * math.cos(a),
@@ -368,9 +370,11 @@ class ZornRiffBristlePainting:
     def _paint_one(self, pos: np.ndarray, size: float, n_steps: int,
                    color: Tuple, velocity: str,
                    ang: Optional[float] = None,
-                   alpha_scale: float = 1.0):
+                   alpha_scale: float = 1.0,
+                   ang_vel: float = 0.0):
         brush = self._make_brush(pos, size)
-        trace = Trace(brush, n_steps, pos, color, velocity, preferred_ang=ang)
+        trace = Trace(brush, n_steps, pos, color, velocity,
+                      preferred_ang=ang, ang_vel=ang_vel)
         if alpha_scale != 1.0:
             trace.alphas = [int(a * alpha_scale) for a in trace.alphas]
         trace.calculate_colors(self.arr)
@@ -402,89 +406,122 @@ class ZornRiffBristlePainting:
 
     # ── mapping tecnica → elenco pennellate ───────────────────────────────
     def _build_traces(self, note: Dict, notes: List[Dict], idx: int
-                      ) -> List[Tuple[int, Optional[float], float, float]]:
+                      ) -> List[Tuple]:
         """
-        Ritorna lista di (n_steps, angle, size_mult, alpha_scale).
-        n_steps è SEMPRE ≥ 80 (era il bug principale nella versione precedente).
-        Ogni nota produce 20-35 tracce per densità pittorica reale.
+        Ritorna lista di 6-tuple:
+          (n_steps, angle, size_mult, alpha_scale, ang_vel, (dx, dy))
+
+        Ogni tecnica ha il suo segno pittorico DISTINTO — pochi segni ma leggibili.
+        ang_vel≠0 crea archi (bend=curva verso su, dive=curva verso giù).
+        (dx, dy) = offset fisso dal centro nota (per pennellate parallele e cluster).
         """
-        tech    = note['technique']
-        dur     = note['duration']
-        base_sz = self._vel_to_size(note['velocity'])
+        tech = note['technique']
+        dur  = note['duration']
 
-        # Pennellate MEDIE: 50-100 step × SPEED=2.5 → 125-250 px (più drammatiche)
-        n_st = max(50, int(50 + dur * 50))   # 50..100 step → 125..250 px
-        _N   = 2                              # moltiplicatore densità (2× tracce per nota)
-
-        # Angolo verso nota successiva
+        # Angolo verso nota successiva (usato da legato)
         nxt = notes[idx + 1] if idx + 1 < len(notes) else None
-        if nxt:
-            ang_next = math.atan2(nxt['y_pos'] - note['y_pos'],
-                                  nxt['x_pos'] - note['x_pos'])
-        else:
-            ang_next = 0.0
+        ang_next = (math.atan2(nxt['y_pos'] - note['y_pos'],
+                               nxt['x_pos'] - note['x_pos'])
+                    if nxt else 0.0)
 
-        # ── helpers ───────────────────────────────────────────────────────
-        def directed(n: int, primary: float, spread: float,
-                     sm: float = 1.0, asc: float = 1.0, st_mult: float = 1.0):
-            """N*_N tracce che scorrono nella direzione primary ± spread gaussiano.
-            Produce FLOW direzionale (non esplosione radiale)."""
-            n_actual = max(1, n * _N)
-            return [(max(35, int(n_st * st_mult)),
-                     primary + random.gauss(0, spread),
-                     sm, asc)
-                    for _ in range(n_actual)]
+        g = lambda mu=0.0, s=0.12: random.gauss(mu, s)  # shortcut gaussiano
 
-        def burst(n_per_ray: int, angles_deg: List[float],
-                  sm: float = 0.5, asc: float = 0.75, st_mult: float = 0.45):
-            """Burst radiale per tecniche a irradiazione (tapping, harmonics)."""
-            return [t for a in angles_deg
-                    for t in directed(n_per_ray, math.radians(a),
-                                      math.pi / 12, sm, asc, st_mult)]
-
-        # ── tecniche ──────────────────────────────────────────────────────
         if tech == 'staccato':
-            return directed(14, 0.0, math.pi / 4, 0.9, 0.88, 0.55)
+            # 2 pennellate bold, corte, diagonali (~-35°) — colpo netto e secco
+            return [
+                (65, math.radians(-35) + g(), 1.20, 0.95, 0.0, (0,    0)),
+                (50, math.radians(-35) + g(), 0.90, 0.78, 0.0, (g(0,12), g(0,8))),
+            ]
 
         elif tech == 'legato':
-            return (directed(10, ang_next, math.pi / 8, 1.0, 1.00)
-                    + directed(6,  ang_next, math.pi / 5, 0.7, 0.75, 0.75))
+            # 2 pennellate lunghe fluide verso la nota successiva
+            return [
+                (130, ang_next + g(0, 0.08), 0.88, 0.90, 0.0, (0,    0)),
+                (100, ang_next + g(0, 0.10), 0.68, 0.72, 0.0, (g(0,18), g(0,10))),
+            ]
 
         elif tech == 'slide':
-            return directed(14, math.radians(-20), math.pi / 8, 1.0, 1.00)
-
-        elif tech == 'bend':
-            return (directed(9,  math.radians(-65), math.pi / 7, 1.0, 1.00)
-                    + directed(6,  math.radians(-45), math.pi / 6, 0.7, 0.80, 0.8))
-
-        elif tech == 'vibrato':
-            return (directed(8,  math.radians(88),  math.pi / 8, 0.85, 0.90)
-                    + directed(8,  math.radians(-88), math.pi / 8, 0.85, 0.90)
-                    + directed(4,  0.0,               math.pi / 5, 0.60, 0.65, 0.7))
+            # 3 linee sottili lunghe quasi-orizzontali, leggermente diagonali (−15°)
+            # Separazione verticale ~20px → tre parallele visibili
+            return [
+                (200, math.radians(-15) + g(0, 0.04), 0.32, 0.52, 0.0, (0, -20)),
+                (185, math.radians(-15) + g(0, 0.04), 0.28, 0.44, 0.0, (0,   0)),
+                (165, math.radians(-15) + g(0, 0.04), 0.25, 0.36, 0.0, (0, +20)),
+            ]
 
         elif tech == 'hammer_on':
-            return directed(14, 0.0, math.pi / 5, 1.0, 0.90, 0.60)
+            # 8 segni corti e densi a raggiera stretta — "botta" sul tasto
+            r = 14.0
+            return [
+                (28, math.radians(a) + g(0, 0.08), 0.62, 0.88, 0.0,
+                 (r * math.cos(math.radians(a)), r * math.sin(math.radians(a))))
+                for a in [0, 45, 90, 135, 180, 225, 270, 315]
+            ]
+
+        elif tech == 'bend':
+            # 2 archi verso l'alto: partono orizzontali, curvano a −90° (corda tirata)
+            n = 95
+            av = -math.pi / (2.0 * n)   # 90° totali in n passi
+            return [
+                (n,      math.radians(0) + g(0, 0.06), 1.02, 0.93, av,      (0,  0)),
+                (n - 15, math.radians(8) + g(0, 0.06), 0.75, 0.72, av * 0.9, (8, 8)),
+            ]
+
+        elif tech == 'vibrato':
+            # 6 pennellate corte alternanti su/giù, con offset X progressivo
+            # → visivamente: oscillazione orizzontale della nota
+            return [
+                (55, math.radians(-82) + g(0, 0.05), 0.80, 0.88, 0.0, (dx,  0))
+                for dx in [0, 0, 18, 18, 36, 36]
+            ] + [
+                (55, math.radians(+82) + g(0, 0.05), 0.80, 0.88, 0.0, (dx,  0))
+                for dx in [0, 18, 18, 36, 36, 54]
+            ]
 
         elif tech == 'powerchord':
-            return (directed(9,  0.0, math.pi / 10, 1.3, 1.00, 1.10)
-                    + directed(7,  0.0, math.pi / 8,  1.0, 0.82, 1.00)
-                    + directed(5,  0.0, math.pi / 7,  0.8, 0.62, 0.90))
+            # 3 pennellate bold orizzontali impilate verticalmente (tre corde)
+            return [
+                (115, math.radians(0) + g(0, 0.05), 1.45, 0.95, 0.0, (0, -28)),
+                (115, math.radians(0) + g(0, 0.05), 1.45, 0.95, 0.0, (0,   0)),
+                (105, math.radians(0) + g(0, 0.05), 1.30, 0.88, 0.0, (0, +28)),
+            ]
 
         elif tech == 'tapping':
-            return burst(3, [0, 60, 120, 180, 240, 300], 0.62, 0.82, 0.44)
+            # 4 raggi corti a 45° (X mark) — le dita che colpiscono il tasto
+            return [
+                (22, math.radians(a) + g(0, 0.10), 0.58, 0.82, 0.0, (0, 0))
+                for a in [45, 135, 225, 315]
+            ]
 
         elif tech == 'dive':
-            return (directed(10, math.radians(72), math.pi / 7, 1.0, 1.00, 1.1)
-                    + directed(7,  math.radians(80), math.pi / 6, 0.7, 0.70, 0.9))
+            # 2 archi verso il basso: partono orizzontali, curvano a +70° (whammy bar)
+            n = 145
+            av = math.pi / (2.6 * n)   # ~70° totali
+            return [
+                (n,      math.radians(10) + g(0, 0.06), 0.98, 0.90, av,      (0,  0)),
+                (n - 20, math.radians(18) + g(0, 0.06), 0.72, 0.72, av * 0.9, (7,  6)),
+            ]
 
         elif tech == 'harmonic_natural':
-            return burst(5, [30, 150, 270], 0.55, 0.58, 1.0)
+            # 3 segni eterei a 120° — alone luminoso (armonico naturale)
+            r = 22.0
+            return [
+                (20, math.radians(a) + g(0, 0.06), 0.38, 0.50, 0.0,
+                 (r * math.cos(math.radians(a)), r * math.sin(math.radians(a))))
+                for a in [30, 150, 270]
+            ]
 
         elif tech == 'harmonic_artificial':
-            return burst(2, [0, 45, 90, 135, 180, 225, 270, 315], 0.45, 0.78, 0.40)
+            # 4 scintille molto corte a 90° — pinch harmonic aggressivo
+            r = 16.0
+            return [
+                (15, math.radians(a) + g(0, 0.08), 0.32, 0.46, 0.0,
+                 (r * math.cos(math.radians(a)), r * math.sin(math.radians(a))))
+                for a in [0, 90, 180, 270]
+            ]
 
         else:
-            return directed(14, 0.0, math.pi / 4, 1.0, 1.0)
+            return [(65, 0.0, 1.0, 1.0, 0.0, (0, 0))]
 
     # ── riff painting ─────────────────────────────────────────────────────
     def paint_riff(self, notes: List[Dict]):
@@ -497,17 +534,17 @@ class ZornRiffBristlePainting:
             print(f"  [{idx+1:2d}/12] {note['note']} {note['technique']:20s}"
                   f"  {len(traces)} tracce × ~{traces[0][0]} step")
 
-            for n_steps, ang, sm, asc in traces:
+            for n_steps, ang, sm, asc, av, (dx, dy) in traces:
                 size = base_sz * sm
-                # Jitter ampio (σ proporzionale al canvas) → copertura totale.
-                # ~40% delle tracce cadono lontane dalla nota → niente isole.
-                jitter = np.array([random.gauss(0, 250.0),
-                                   random.gauss(0, 175.0)])
-                start = np.clip(center + jitter,
+                # Jitter minimo (σ=15px) → segni rimangono vicini al centro
+                # La posizione musicale è preservata: ogni nota ha il suo luogo.
+                jitter = np.array([random.gauss(0, 15.0),
+                                   random.gauss(0, 15.0)])
+                start = np.clip(center + np.array([dx, dy]) + jitter,
                                 [0.0, 0.0], [float(self.W), float(self.H)])
                 self._paint_one(start, size, n_steps,
                                 color, note['velocity'],
-                                ang=ang, alpha_scale=asc)
+                                ang=ang, alpha_scale=asc, ang_vel=av)
 
     # ── data ──────────────────────────────────────────────────────────────
     def parse_riff(self) -> List[Dict]:
