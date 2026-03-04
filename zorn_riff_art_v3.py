@@ -330,8 +330,8 @@ class ZornRiffBristlePainting:
     """
     Pipeline: riff chitarra → tela pittorica a pennellate fisicamente simulate.
 
-    Ogni nota genera 20-35 Trace con n_steps 80-150 → pennellate da 240-450 px.
-    La densità risultante copre il canvas con textura di olio pittorico reale.
+    Ogni nota genera 88-124 Trace con n_steps 35-70 → pennellate da 52-105 px.
+    La densità risultante (~1200 tracce totali) copre il canvas come olio pittorico.
     """
 
     def __init__(self, width: int = 1600, height: int = 1000, seed: int = 42):
@@ -384,10 +384,10 @@ class ZornRiffBristlePainting:
         """
         # (color_tuple, n_strokes, size_lo, size_hi, alpha_scale, ang_sigma)
         configs = [
-            (zorn_blend(ZORN['ochre'], ZORN['white'],     0.08), 14, 24, 55, 0.70, 0.15),
-            (zorn_blend(ZORN['ochre'], ZORN['black'],     0.12), 14, 18, 40, 0.65, 0.18),
-            (zorn_blend(ZORN['ochre'], ZORN['vermilion'], 0.06), 10, 14, 32, 0.55, 0.20),
-            (zorn_blend(ZORN['ochre'], ZORN['black'],     0.06),  8, 10, 22, 0.50, 0.25),
+            (zorn_blend(ZORN['ochre'], ZORN['white'],     0.08), 30, 24, 55, 0.70, 0.15),
+            (zorn_blend(ZORN['ochre'], ZORN['black'],     0.12), 28, 18, 40, 0.65, 0.18),
+            (zorn_blend(ZORN['ochre'], ZORN['vermilion'], 0.06), 22, 14, 32, 0.55, 0.20),
+            (zorn_blend(ZORN['ochre'], ZORN['black'],     0.06), 20, 10, 22, 0.50, 0.25),
         ]
         for col, n, sz_lo, sz_hi, a_sc, ang_sig in configs:
             for _ in range(n):
@@ -412,8 +412,9 @@ class ZornRiffBristlePainting:
         dur     = note['duration']
         base_sz = self._vel_to_size(note['velocity'])
 
-        # Numero di step fisso e lungo: pennellate da 240-450 px
-        n_st = max(80, int(80 + dur * 100))   # 80..180 step → 240..540 px
+        # Pennellate CORTE come nel riferimento (35-70 step = 52-105 px a SPEED=1.5)
+        n_st = max(35, int(35 + dur * 35))   # 35..70 step → 52..105 px
+        _N   = 4                              # moltiplicatore densità (4× tracce per nota)
 
         # Angolo verso nota successiva
         nxt = notes[idx + 1] if idx + 1 < len(notes) else None
@@ -426,12 +427,13 @@ class ZornRiffBristlePainting:
         # ── helpers ───────────────────────────────────────────────────────
         def directed(n: int, primary: float, spread: float,
                      sm: float = 1.0, asc: float = 1.0, st_mult: float = 1.0):
-            """N tracce che scorrono nella direzione primary ± spread gaussiano.
+            """N*_N tracce che scorrono nella direzione primary ± spread gaussiano.
             Produce FLOW direzionale (non esplosione radiale)."""
-            return [(max(80, int(n_st * st_mult)),
+            n_actual = max(1, n * _N)
+            return [(max(35, int(n_st * st_mult)),
                      primary + random.gauss(0, spread),
                      sm, asc)
-                    for _ in range(n)]
+                    for _ in range(n_actual)]
 
         def burst(n_per_ray: int, angles_deg: List[float],
                   sm: float = 0.5, asc: float = 0.75, st_mult: float = 0.45):
@@ -508,11 +510,13 @@ class ZornRiffBristlePainting:
 
             for n_steps, ang, sm, asc in traces:
                 size = base_sz * sm
-                # Spread ampio: le tracce partono da una zona attorno al centro,
-                # non tutte dallo stesso punto → no pattern a ragno
-                jitter = np.array([random.gauss(0, 110),   # ±110 px orizzontale
-                                   random.gauss(0, 75)])    # ±75 px verticale
-                self._paint_one(center + jitter, size, n_steps,
+                # Jitter ampio (σ proporzionale al canvas) → copertura totale.
+                # ~40% delle tracce cadono lontane dalla nota → niente isole.
+                jitter = np.array([random.gauss(0, self.W * 0.40),
+                                   random.gauss(0, self.H * 0.35)])
+                start = np.clip(center + jitter,
+                                [0.0, 0.0], [float(self.W), float(self.H)])
+                self._paint_one(start, size, n_steps,
                                 color, note['velocity'],
                                 ang=ang, alpha_scale=asc)
 
