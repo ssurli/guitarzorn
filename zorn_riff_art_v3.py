@@ -224,7 +224,7 @@ class Trace:
       MIX_STR  = 0.015         → wet-paint mixing col canvas sottostante
       NOISE_AMP= 0.30          → variazione angolare moderata (≤54°)
     """
-    SPEED     = 1.5      # px/step più lento → catena IK più stabile
+    SPEED     = 2.5      # px/step → pennellate da 125-250 px (più drammatiche)
     NOISE_F   = 0.007
     NOISE_AMP = 0.07     # ≤12° deviazione → pennellate quasi dritte
     MIX_START = 5
@@ -384,10 +384,10 @@ class ZornRiffBristlePainting:
         """
         # (color_tuple, n_strokes, size_lo, size_hi, alpha_scale, ang_sigma)
         configs = [
-            (zorn_blend(ZORN['ochre'], ZORN['white'],     0.08), 30, 24, 55, 0.70, 0.15),
-            (zorn_blend(ZORN['ochre'], ZORN['black'],     0.12), 28, 18, 40, 0.65, 0.18),
-            (zorn_blend(ZORN['ochre'], ZORN['vermilion'], 0.06), 22, 14, 32, 0.55, 0.20),
-            (zorn_blend(ZORN['ochre'], ZORN['black'],     0.06), 20, 10, 22, 0.50, 0.25),
+            (zorn_blend(ZORN['ochre'], ZORN['white'],     0.08), 18, 24, 55, 0.65, 0.15),
+            (zorn_blend(ZORN['ochre'], ZORN['black'],     0.12), 16, 18, 40, 0.60, 0.18),
+            (zorn_blend(ZORN['ochre'], ZORN['vermilion'], 0.06), 12, 14, 32, 0.50, 0.20),
+            (zorn_blend(ZORN['ochre'], ZORN['black'],     0.06), 10, 10, 22, 0.45, 0.25),
         ]
         for col, n, sz_lo, sz_hi, a_sc, ang_sig in configs:
             for _ in range(n):
@@ -412,9 +412,9 @@ class ZornRiffBristlePainting:
         dur     = note['duration']
         base_sz = self._vel_to_size(note['velocity'])
 
-        # Pennellate CORTE come nel riferimento (35-70 step = 52-105 px a SPEED=1.5)
-        n_st = max(35, int(35 + dur * 35))   # 35..70 step → 52..105 px
-        _N   = 4                              # moltiplicatore densità (4× tracce per nota)
+        # Pennellate MEDIE: 50-100 step × SPEED=2.5 → 125-250 px (più drammatiche)
+        n_st = max(50, int(50 + dur * 50))   # 50..100 step → 125..250 px
+        _N   = 2                              # moltiplicatore densità (2× tracce per nota)
 
         # Angolo verso nota successiva
         nxt = notes[idx + 1] if idx + 1 < len(notes) else None
@@ -444,58 +444,47 @@ class ZornRiffBristlePainting:
 
         # ── tecniche ──────────────────────────────────────────────────────
         if tech == 'staccato':
-            # Colpi brevi, direzione prevalentemente in avanti con ampio spread
-            return directed(22, 0.0, math.pi / 2, 0.9, 0.88, 0.52)
+            return directed(14, 0.0, math.pi / 4, 0.9, 0.88, 0.55)
 
         elif tech == 'legato':
-            # Scorrono verso la nota successiva (direzione musicale)
-            return (directed(15, ang_next, math.pi / 6, 1.0, 1.00)
-                    + directed(9, ang_next, math.pi / 4, 0.7, 0.75, 0.75))
+            return (directed(10, ang_next, math.pi / 8, 1.0, 1.00)
+                    + directed(6,  ang_next, math.pi / 5, 0.7, 0.75, 0.75))
 
         elif tech == 'slide':
-            # Diagonale ~-20° (pennellata che "scivola" in salita)
-            return directed(23, math.radians(-20), math.pi / 6, 1.0, 1.00)
+            return directed(14, math.radians(-20), math.pi / 8, 1.0, 1.00)
 
         elif tech == 'bend':
-            # Prevalentemente verso l'alto (corda "tirata")
-            return (directed(14, math.radians(-65), math.pi / 5, 1.0, 1.00)
-                    + directed(9,  math.radians(-45), math.pi / 4, 0.7, 0.80, 0.8))
+            return (directed(9,  math.radians(-65), math.pi / 7, 1.0, 1.00)
+                    + directed(6,  math.radians(-45), math.pi / 6, 0.7, 0.80, 0.8))
 
         elif tech == 'vibrato':
-            # Due flussi opposti che si scontrano (oscillazione)
-            return (directed(12, math.radians(88),  math.pi / 6, 0.85, 0.90)
-                    + directed(12, math.radians(-88), math.pi / 6, 0.85, 0.90)
-                    + directed(6,  0.0,               math.pi / 4, 0.60, 0.65, 0.7))
+            return (directed(8,  math.radians(88),  math.pi / 8, 0.85, 0.90)
+                    + directed(8,  math.radians(-88), math.pi / 8, 0.85, 0.90)
+                    + directed(4,  0.0,               math.pi / 5, 0.60, 0.65, 0.7))
 
         elif tech == 'hammer_on':
-            # Flusso rightward con spread moderato (colpo in avanti)
-            return directed(24, 0.0, math.pi / 3, 1.0, 0.90, 0.58)
+            return directed(14, 0.0, math.pi / 5, 1.0, 0.90, 0.60)
 
         elif tech == 'powerchord':
-            # Tre strati orizzontali (accordo largo e piatto)
-            return (directed(13, 0.0, math.pi / 8, 1.3, 1.00, 1.10)
-                    + directed(10, 0.0, math.pi / 6, 1.0, 0.82, 1.00)
-                    + directed(8,  0.0, math.pi / 5, 0.8, 0.62, 0.90))
+            return (directed(9,  0.0, math.pi / 10, 1.3, 1.00, 1.10)
+                    + directed(7,  0.0, math.pi / 8,  1.0, 0.82, 1.00)
+                    + directed(5,  0.0, math.pi / 7,  0.8, 0.62, 0.90))
 
         elif tech == 'tapping':
-            # Burst radiale breve (le dita che picchiano → anelli di luce)
-            return burst(4, [0, 60, 120, 180, 240, 300], 0.62, 0.82, 0.44)
+            return burst(3, [0, 60, 120, 180, 240, 300], 0.62, 0.82, 0.44)
 
         elif tech == 'dive':
-            # Flusso verso il basso (whammy bar che affonda)
-            return (directed(15, math.radians(72), math.pi / 5, 1.0, 1.00, 1.1)
-                    + directed(10, math.radians(80), math.pi / 4, 0.7, 0.70, 0.9))
+            return (directed(10, math.radians(72), math.pi / 7, 1.0, 1.00, 1.1)
+                    + directed(7,  math.radians(80), math.pi / 6, 0.7, 0.70, 0.9))
 
         elif tech == 'harmonic_natural':
-            # Tre raggi eterei a 120° (alone radiale leggero)
-            return burst(8, [30, 150, 270], 0.55, 0.58, 1.0)
+            return burst(5, [30, 150, 270], 0.55, 0.58, 1.0)
 
         elif tech == 'harmonic_artificial':
-            # 8 scintille radiali brevi (pinch harmonic aggressivo)
-            return burst(3, [0, 45, 90, 135, 180, 225, 270, 315], 0.45, 0.78, 0.40)
+            return burst(2, [0, 45, 90, 135, 180, 225, 270, 315], 0.45, 0.78, 0.40)
 
         else:
-            return directed(22, 0.0, math.pi / 3, 1.0, 1.0)
+            return directed(14, 0.0, math.pi / 4, 1.0, 1.0)
 
     # ── riff painting ─────────────────────────────────────────────────────
     def paint_riff(self, notes: List[Dict]):
@@ -512,8 +501,8 @@ class ZornRiffBristlePainting:
                 size = base_sz * sm
                 # Jitter ampio (σ proporzionale al canvas) → copertura totale.
                 # ~40% delle tracce cadono lontane dalla nota → niente isole.
-                jitter = np.array([random.gauss(0, self.W * 0.40),
-                                   random.gauss(0, self.H * 0.35)])
+                jitter = np.array([random.gauss(0, 250.0),
+                                   random.gauss(0, 175.0)])
                 start = np.clip(center + jitter,
                                 [0.0, 0.0], [float(self.W), float(self.H)])
                 self._paint_one(start, size, n_steps,
