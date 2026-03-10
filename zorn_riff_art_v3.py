@@ -427,26 +427,25 @@ class ZornRiffBristlePainting:
         g = lambda mu=0.0, s=0.12: random.gauss(mu, s)  # shortcut gaussiano
 
         if tech == 'staccato':
-            # 2 pennellate bold, corte, diagonali (~-35°) — colpo netto e secco
+            # 2 pennellate bold lunghe diagonali (~-35°) — 250px, colpo netto e deciso
             return [
-                (65, math.radians(-35) + g(), 1.20, 0.95, 0.0, (0,    0)),
-                (50, math.radians(-35) + g(), 0.90, 0.78, 0.0, (g(0,12), g(0,8))),
+                (100, math.radians(-35) + g(), 1.30, 0.96, 0.0, (0,    0)),
+                (75,  math.radians(-35) + g(), 1.05, 0.80, 0.0, (g(0,12), g(0,8))),
             ]
 
         elif tech == 'legato':
-            # 2 pennellate lunghe fluide verso la nota successiva
+            # 2 pennellate lunghe fluide verso nota successiva (più spesse per visibilità)
             return [
-                (130, ang_next + g(0, 0.08), 0.88, 0.90, 0.0, (0,    0)),
-                (100, ang_next + g(0, 0.10), 0.68, 0.72, 0.0, (g(0,18), g(0,10))),
+                (135, ang_next + g(0, 0.08), 1.00, 0.92, 0.0, (0,    0)),
+                (105, ang_next + g(0, 0.10), 0.80, 0.80, 0.0, (g(0,18), g(0,10))),
             ]
 
         elif tech == 'slide':
-            # 3 linee sottili lunghe quasi-orizzontali, leggermente diagonali (−15°)
-            # Separazione verticale ~20px → tre parallele visibili
+            # 3 linee sottili lunghe quasi-orizzontali, semi-trasparenti (effetto fantasma)
             return [
-                (200, math.radians(-15) + g(0, 0.04), 0.32, 0.52, 0.0, (0, -20)),
-                (185, math.radians(-15) + g(0, 0.04), 0.28, 0.44, 0.0, (0,   0)),
-                (165, math.radians(-15) + g(0, 0.04), 0.25, 0.36, 0.0, (0, +20)),
+                (200, math.radians(-15) + g(0, 0.04), 0.32, 0.38, 0.0, (0, -20)),
+                (185, math.radians(-15) + g(0, 0.04), 0.28, 0.32, 0.0, (0,   0)),
+                (165, math.radians(-15) + g(0, 0.04), 0.25, 0.26, 0.0, (0, +20)),
             ]
 
         elif tech == 'hammer_on':
@@ -459,37 +458,40 @@ class ZornRiffBristlePainting:
             ]
 
         elif tech == 'bend':
-            # 2 archi verso l'alto: partono orizzontali, curvano a −90° (corda tirata)
-            n = 95
-            av = -math.pi / (2.0 * n)   # 90° totali in n passi
+            # 2 archi verso l'alto: partono a -45°, curvano 90° → C rovesciata
+            # raggio = SPEED/|ang_vel| = 2.5/0.0262 ≈ 95px → arco netto e leggibile
+            n = 60
+            av = -math.pi / (2.0 * n)
             return [
-                (n,      math.radians(0) + g(0, 0.06), 1.02, 0.93, av,      (0,  0)),
-                (n - 15, math.radians(8) + g(0, 0.06), 0.75, 0.72, av * 0.9, (8, 8)),
+                (n,      math.radians(-45) + g(0, 0.06), 1.10, 0.95, av,       (0,  0)),
+                (n - 15, math.radians(-37) + g(0, 0.06), 0.82, 0.78, av * 0.9, (8,  8)),
             ]
 
         elif tech == 'vibrato':
-            # 6 pennellate corte alternanti su/giù, con offset X progressivo
-            # → visivamente: oscillazione orizzontale della nota
+            # 10 tracce corte alternanti su/giù con X-offset progressivo lineare
+            # → sinusoide discreta leggibile (non blob caotico)
             return [
-                (55, math.radians(-82) + g(0, 0.05), 0.80, 0.88, 0.0, (dx,  0))
-                for dx in [0, 0, 18, 18, 36, 36]
+                (35, math.radians(-60) + g(0, 0.05), 0.90, 0.90, 0.0, (dx,  0))
+                for dx in [0, 12, 24, 36, 48]
             ] + [
-                (55, math.radians(+82) + g(0, 0.05), 0.80, 0.88, 0.0, (dx,  0))
-                for dx in [0, 18, 18, 36, 36, 54]
+                (35, math.radians(+60) + g(0, 0.05), 0.90, 0.90, 0.0, (dx,  0))
+                for dx in [6, 18, 30, 42, 54]
             ]
 
         elif tech == 'powerchord':
-            # 3 pennellate bold orizzontali impilate verticalmente (tre corde)
+            # 3 pennellate bold orizz. ±35px Y — separazione 70px > larghezza brush (31px)
             return [
-                (115, math.radians(0) + g(0, 0.05), 1.45, 0.95, 0.0, (0, -28)),
-                (115, math.radians(0) + g(0, 0.05), 1.45, 0.95, 0.0, (0,   0)),
-                (105, math.radians(0) + g(0, 0.05), 1.30, 0.88, 0.0, (0, +28)),
+                (110, math.radians(0) + g(0, 0.05), 1.35, 0.98, 0.0, (0, -35)),
+                (110, math.radians(0) + g(0, 0.05), 1.35, 0.98, 0.0, (0,   0)),
+                (105, math.radians(0) + g(0, 0.05), 1.20, 0.90, 0.0, (0, +35)),
             ]
 
         elif tech == 'tapping':
-            # 4 raggi corti a 45° (X mark) — le dita che colpiscono il tasto
+            # 4 raggi a X con offset radiale r=12px — fix: erano tutti a (0,0)
+            r = 12.0
             return [
-                (22, math.radians(a) + g(0, 0.10), 0.58, 0.82, 0.0, (0, 0))
+                (22, math.radians(a) + g(0, 0.10), 0.58, 0.82, 0.0,
+                 (r * math.cos(math.radians(a)), r * math.sin(math.radians(a))))
                 for a in [45, 135, 225, 315]
             ]
 
@@ -503,19 +505,19 @@ class ZornRiffBristlePainting:
             ]
 
         elif tech == 'harmonic_natural':
-            # 3 segni eterei a 120° — alone luminoso (armonico naturale)
+            # 3 segni eterei a 120° — n_steps 20→35 per evitare fadeout precoce
             r = 22.0
             return [
-                (20, math.radians(a) + g(0, 0.06), 0.38, 0.50, 0.0,
+                (35, math.radians(a) + g(0, 0.06), 0.38, 0.35, 0.0,
                  (r * math.cos(math.radians(a)), r * math.sin(math.radians(a))))
                 for a in [30, 150, 270]
             ]
 
         elif tech == 'harmonic_artificial':
-            # 4 scintille molto corte a 90° — pinch harmonic aggressivo
+            # 4 scintille a 90° — fix critico: n_steps 15→28, size 0.32→0.55
             r = 16.0
             return [
-                (15, math.radians(a) + g(0, 0.08), 0.32, 0.46, 0.0,
+                (28, math.radians(a) + g(0, 0.08), 0.55, 0.40, 0.0,
                  (r * math.cos(math.radians(a)), r * math.sin(math.radians(a))))
                 for a in [0, 90, 180, 270]
             ]
