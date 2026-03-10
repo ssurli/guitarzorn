@@ -27,29 +27,38 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 from PIL import Image, ImageDraw
 
-# ─── Palette Zorn (4 colori rigorosi) ────────────────────────────────────────
+# ─── Palette Zorn (5 colori: 4 storici + gold per G settima) ─────────────────
 ZORN = {
     'ochre':     (196, 164, 106),
     'vermilion': (227,  66,  52),
     'black':     ( 28,  28,  28),
     'white':     (242, 242, 242),
+    'gold':      (220, 140,  73),   # blend ochre+vermilion → freccia armonica verso A
 }
-_NOTE_COL = {'A': 'ochre', 'C': 'vermilion', 'D': 'black', 'E': 'white'}
+
+# Scala pentatonica A: tonica=vermilion (domina), G settima=gold (freccia)
+_NOTE_COL = {
+    'A': 'vermilion',  # tonica — colore più saturo e caldo
+    'C': 'ochre',      # 3a minore — terra, supporto
+    'D': 'black',      # 4a giusta — peso strutturale
+    'E': 'white',      # 5a giusta — aria, contrasto
+    'G': 'gold',       # 7a minore — tensione verso A
+}
 
 
 def zorn_blend(c1: Tuple, c2: Tuple, t: float) -> Tuple[int, int, int]:
     return tuple(max(0, min(255, int(c1[i] * (1 - t) + c2[i] * t))) for i in range(3))
 
 
-def get_note_color(note: str, midi: int) -> Tuple[int, int, int]:
-    """Colore Zorn della nota + shift luminosità per ottava."""
-    base = zorn_blend(ZORN['ochre'], ZORN['black'], 0.5) if note == 'G' \
-        else ZORN[_NOTE_COL.get(note, 'ochre')]
-    b = (midi - 40) / (80 - 40)
-    if b > 0.5:
-        return zorn_blend(base, ZORN['white'],  (b - 0.5) * 0.5)
-    else:
-        return zorn_blend(base, ZORN['black'],  (0.5 - b) * 0.4)
+def get_note_color(note: str, velocity: str) -> Tuple[int, int, int]:
+    """Colore Zorn della nota + shift luminosità per velocity (Agente 1)."""
+    base = ZORN[_NOTE_COL.get(note, 'ochre')]
+    lum = {'p': -0.28, 'mp': -0.14, 'mf': 0.0, 'f': 0.18, 'ff': 0.36}.get(velocity, 0.0)
+    if lum < 0:
+        return zorn_blend(base, ZORN['black'], abs(lum) * 0.6)
+    elif lum > 0:
+        return zorn_blend(base, ZORN['white'], lum * 0.5)
+    return base
 
 
 def _snoise(x: float) -> float:
@@ -110,8 +119,8 @@ class Brush:
     Direzione = atan2 della variazione della media su 4 frame recenti.
     """
     N_AVG       = 4
-    VERT_NOISE  = 8.0
-    HORIZ_NOISE = 4.0
+    VERT_NOISE  = 12.0   # aumentato 8→12 (Agente 2+3: più vibrazione setole)
+    HORIZ_NOISE = 6.0    # aumentato 4→6 (flessione ciuffo più realistica)
     NOISE_SPEED = 0.04
 
     def __init__(self, init_pos: np.ndarray, size: float,
@@ -202,14 +211,21 @@ class Brush:
                    colors: List[Tuple[int, int, int]], alpha: int):
         if not self.is_ready() or alpha <= 0:
             return
+        alpha_norm = alpha / 255.0
         for b, bristle in enumerate(self.bristles):
             fill = colors[b] + (alpha,)
-            for p1, p2, thick in bristle.segments():
+            segs = list(bristle.segments())
+            n_seg = max(1, len(segs))
+            for i, (p1, p2, thick) in enumerate(segs):
+                # Taper esponenziale verso punta della setola (Agente 3)
+                taper = (1.0 - i / n_seg) ** 1.3
+                # Modula con alpha per impasto più credibile
+                w = max(1, int(thick * taper * (0.4 + 0.6 * alpha_norm)))
                 draw.line(
                     [(float(p1[0]), float(p1[1])),
                      (float(p2[0]), float(p2[1]))],
                     fill=fill,
-                    width=max(1, int(thick)),
+                    width=w,
                 )
 
 
@@ -259,14 +275,14 @@ class Trace:
                                     self.SPEED * math.sin(a)])
             self.positions.append(pos.copy())
 
-        # ── Alpha decay ────────────────────────────────────────────────────
-        a0    = self._VEL_ALPHA.get(velocity, 200)
-        a_dec = min(a0 / self.n_steps, 25.0)
-        a     = float(a0)
+        # ── Alpha decay ESPONENZIALE (Agente 2+3: simula drag olio su tela) ──
+        a0   = self._VEL_ALPHA.get(velocity, 200)
+        k    = 2.8   # costante decadimento: forte inizio, coda lunga morbida
+        base = 18    # alpha residuale → smearing naturale alla fine del tratto
         self.alphas: List[int] = []
-        for _ in range(self.n_steps):
-            self.alphas.append(int(max(0, a)))
-            a = max(0.0, a - a_dec)
+        for s in range(self.n_steps):
+            alpha_s = a0 * math.exp(-k * s / max(1, self.n_steps - 1))
+            self.alphas.append(int(max(base, alpha_s)))
 
     def calculate_colors(self, canvas_arr: np.ndarray):
         n = self.brush.n
@@ -294,12 +310,15 @@ class Trace:
         for s in range(mix_start, self.n_steps):
             px, py = int(self.positions[s][0]), int(self.positions[s][1])
             step_cols = []
+            # Blending differenziato: opaco (alpha alto) vs. glaze (Agente 3)
+            alpha_norm = self.alphas[s] / 255.0
+            ms_s = ms * 3.5 if alpha_norm < 0.40 else ms  # glaze: più canvas
             for b in range(n):
                 if 0 <= py < H and 0 <= px < W:
                     cp   = canvas_arr[py, px]
-                    rp[b] = (rp[b] + ms * float(cp[0])) / (1 + ms)
-                    gp[b] = (gp[b] + ms * float(cp[1])) / (1 + ms)
-                    bp[b] = (bp[b] + ms * float(cp[2])) / (1 + ms)
+                    rp[b] = (rp[b] + ms_s * float(cp[0])) / (1 + ms_s)
+                    gp[b] = (gp[b] + ms_s * float(cp[1])) / (1 + ms_s)
+                    bp[b] = (bp[b] + ms_s * float(cp[2])) / (1 + ms_s)
                 step_cols.append((int(rp[b]), int(gp[b]), int(bp[b])))
             colors.append(step_cols)
 
@@ -383,23 +402,31 @@ class ZornRiffBristlePainting:
     # ── ground layer ──────────────────────────────────────────────────────
     def _ground_layer(self):
         """
-        Imprimitura: 36 pennellate orizzontali di varianti ochre a media alpha.
-        Crea la textura di base della tela preparata.
+        Imprimitura ridotta (Agente 3): 18 pennellate sparse invece di 56.
+        Il ground rimane visibile sotto i segni leggeri del riff.
+        Texture di tela aggiunta via rumore gaussiano prima delle pennellate.
         """
+        # Texture granulosa tela (Agente 3: simula weave della tela)
+        arr = np.array(self.canvas)
+        noise = np.random.normal(0, 7, arr.shape[:2] + (3,)).astype(int)
+        arr[:, :, :3] = np.clip(arr[:, :, :3].astype(int) + noise, 0, 255).astype(np.uint8)
+        self.canvas.paste(Image.fromarray(arr[:, :, :3].astype(np.uint8)).convert('RGBA'))
+        self.arr[:] = np.array(self.canvas)
+
         # (color_tuple, n_strokes, size_lo, size_hi, alpha_scale, ang_sigma)
+        # Ridotto: 8+6+4 = 18 pennellate (era 56) → imprimitura visibile sotto riff
         configs = [
-            (zorn_blend(ZORN['ochre'], ZORN['white'],     0.08), 18, 24, 55, 0.65, 0.15),
-            (zorn_blend(ZORN['ochre'], ZORN['black'],     0.12), 16, 18, 40, 0.60, 0.18),
-            (zorn_blend(ZORN['ochre'], ZORN['vermilion'], 0.06), 12, 14, 32, 0.50, 0.20),
-            (zorn_blend(ZORN['ochre'], ZORN['black'],     0.06), 10, 10, 22, 0.45, 0.25),
+            (zorn_blend(ZORN['ochre'], ZORN['white'],     0.08), 8, 16, 35, 0.50, 0.15),
+            (zorn_blend(ZORN['ochre'], ZORN['black'],     0.12), 6, 12, 28, 0.45, 0.18),
+            (zorn_blend(ZORN['ochre'], ZORN['vermilion'], 0.06), 4,  8, 18, 0.35, 0.20),
         ]
         for col, n, sz_lo, sz_hi, a_sc, ang_sig in configs:
             for _ in range(n):
-                x    = random.uniform(-120, self.W + 120)
-                y    = random.uniform(-120, self.H + 120)
+                x    = random.uniform(-80, self.W + 80)
+                y    = random.uniform(-80, self.H + 80)
                 ang  = random.gauss(0, ang_sig)
                 size = random.uniform(sz_lo, sz_hi)
-                n_st = max(120, int(random.uniform(200, 320)))
+                n_st = max(80, int(random.uniform(140, 220)))
                 self._paint_one(np.array([x, y], dtype=float),
                                 size, n_st, col, 'f',
                                 ang=ang, alpha_scale=a_sc)
@@ -441,11 +468,11 @@ class ZornRiffBristlePainting:
             ]
 
         elif tech == 'slide':
-            # 3 linee sottili lunghe quasi-orizzontali, semi-trasparenti (effetto fantasma)
+            # 3 linee sottili lunghe quasi-orizzontali — size_mult ≥ 0.50 → ≥8.5px (Agente 2)
             return [
-                (200, math.radians(-15) + g(0, 0.04), 0.32, 0.38, 0.0, (0, -20)),
-                (185, math.radians(-15) + g(0, 0.04), 0.28, 0.32, 0.0, (0,   0)),
-                (165, math.radians(-15) + g(0, 0.04), 0.25, 0.26, 0.0, (0, +20)),
+                (200, math.radians(-15) + g(0, 0.04), 0.50, 0.38, 0.0, (0, -20)),
+                (185, math.radians(-15) + g(0, 0.04), 0.45, 0.32, 0.0, (0,   0)),
+                (165, math.radians(-15) + g(0, 0.04), 0.40, 0.26, 0.0, (0, +20)),
             ]
 
         elif tech == 'hammer_on':
@@ -530,7 +557,7 @@ class ZornRiffBristlePainting:
         for idx, note in enumerate(notes):
             base_sz = self._vel_to_size(note['velocity'])
             center  = np.array([note['x_pos'], note['y_pos']])
-            color   = get_note_color(note['note'], note['pitch'])
+            color   = get_note_color(note['note'], note['velocity'])
             traces  = self._build_traces(note, notes, idx)
 
             print(f"  [{idx+1:2d}/12] {note['note']} {note['technique']:20s}"
