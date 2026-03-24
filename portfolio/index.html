@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Photo Portfolio · Tinder</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --pink: #fd5068;
+      --orange: #ff6b35;
+      --dark: #111;
+      --card-bg: #1a1a1a;
+      --text: #f0f0f0;
+      --sub: #888;
+      --radius: 18px;
+    }
+
+    body {
+      background: var(--dark);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ── Header ─────────────────────────────── */
+    header {
+      width: 100%;
+      padding: 24px 20px 12px;
+      text-align: center;
+      background: linear-gradient(180deg, #1a0008 0%, transparent 100%);
+    }
+
+    .logo {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--sub);
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 18px;
+    }
+
+    .logo svg { width: 18px; height: 18px; fill: var(--pink); }
+
+    .profile-name {
+      font-size: 32px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--pink), var(--orange));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .profile-tagline {
+      margin-top: 6px;
+      font-size: 15px;
+      color: var(--sub);
+    }
+
+    /* ── Main card stack ─────────────────────── */
+    main {
+      width: 100%;
+      max-width: 480px;
+      padding: 20px 16px 40px;
+    }
+
+    /* Hero card */
+    .hero-card {
+      position: relative;
+      width: 100%;
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--card-bg);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+      margin-bottom: 20px;
+      cursor: grab;
+    }
+
+    .hero-card img {
+      width: 100%;
+      aspect-ratio: 4/5;
+      object-fit: cover;
+      object-position: top center;
+      display: block;
+    }
+
+    .hero-overlay {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 60px 20px 20px;
+      background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%);
+    }
+
+    .hero-overlay h2 { font-size: 26px; font-weight: 700; }
+    .hero-overlay p  { font-size: 14px; color: #ccc; margin-top: 4px; }
+
+    /* Dots indicator */
+    .dots {
+      display: flex;
+      justify-content: center;
+      gap: 6px;
+      margin: -8px 0 16px;
+    }
+
+    .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--sub);
+      transition: background .2s, width .2s;
+    }
+
+    .dot.active { background: var(--pink); width: 20px; border-radius: 3px; }
+
+    /* Grid of remaining photos */
+    .photo-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .photo-cell {
+      position: relative;
+      border-radius: 14px;
+      overflow: hidden;
+      background: var(--card-bg);
+      aspect-ratio: 3/4;
+    }
+
+    .photo-cell img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      object-position: top center;
+      display: block;
+      transition: transform .3s ease;
+    }
+
+    .photo-cell:hover img { transform: scale(1.04); }
+
+    .photo-cell .badge {
+      position: absolute;
+      top: 8px; right: 8px;
+      background: rgba(0,0,0,0.55);
+      backdrop-filter: blur(6px);
+      border-radius: 20px;
+      padding: 3px 9px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    /* Action buttons */
+    .actions {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      margin: 8px 0 24px;
+    }
+
+    .btn {
+      width: 58px; height: 58px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      transition: transform .15s, box-shadow .15s;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+
+    .btn:hover { transform: scale(1.1); }
+
+    .btn-nope  { background: #fff; color: #f44; }
+    .btn-boost { background: linear-gradient(135deg, #7b4fff, #5b7fff); color: #fff; width: 46px; height: 46px; align-self: center; }
+    .btn-like  { background: linear-gradient(135deg, var(--pink), var(--orange)); color: #fff; }
+
+    /* About section */
+    .about {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+
+    .about h3 {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--sub);
+      margin-bottom: 12px;
+    }
+
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .tag {
+      border: 1px solid #333;
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-size: 13px;
+      color: #ddd;
+    }
+
+    .tag span { margin-right: 5px; }
+
+    /* Nanobanana badge */
+    .nb-badge {
+      margin-top: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: var(--sub);
+      font-size: 12px;
+    }
+
+    .nb-badge strong {
+      background: linear-gradient(135deg, #ffe066, #ff9900);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* Lightbox */
+    .lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.92);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .lightbox.open { display: flex; }
+
+    .lightbox img {
+      max-width: 92vw;
+      max-height: 90vh;
+      border-radius: 12px;
+      object-fit: contain;
+    }
+
+    .lightbox-close {
+      position: absolute;
+      top: 20px; right: 20px;
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 32px;
+      cursor: pointer;
+      line-height: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 24 24"><path d="M12 2C8.5 2 6 5 6 8c0 5.25 6 12 6 12s6-6.75 6-12c0-3-2.5-6-6-6z"/></svg>
+      Photo Portfolio
+    </div>
+    <h1 class="profile-name">Il mio profilo</h1>
+    <p class="profile-tagline">Avventure, stile &amp; buona musica 🎸</p>
+  </header>
+
+  <main>
+
+    <!-- Hero photo (first / best shot) -->
+    <div class="hero-card" id="heroCard">
+      <img id="heroImg" src="photos/photo1.jpg" alt="Foto 1" onclick="openLightbox('photos/photo1.jpg')" />
+      <div class="hero-overlay">
+        <h2>Foto principale</h2>
+        <p>Prima impressione ✨</p>
+      </div>
+    </div>
+
+    <!-- Swipe dot indicator -->
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+
+    <!-- Action buttons -->
+    <div class="actions">
+      <button class="btn btn-nope"  title="Nope">✕</button>
+      <button class="btn btn-boost" title="Boost">⚡</button>
+      <button class="btn btn-like"  title="Like">♥</button>
+    </div>
+
+    <!-- Grid of other photos -->
+    <div class="photo-grid">
+      <div class="photo-cell">
+        <img src="photos/photo2.jpg" alt="Foto 2" onclick="openLightbox('photos/photo2.jpg')" />
+        <div class="badge">📍 Amsterdam</div>
+      </div>
+      <div class="photo-cell">
+        <img src="photos/photo3.jpg" alt="Foto 3" onclick="openLightbox('photos/photo3.jpg')" />
+        <div class="badge">🤿 Avventura</div>
+      </div>
+      <div class="photo-cell">
+        <img src="photos/photo4.jpg" alt="Foto 4" onclick="openLightbox('photos/photo4.jpg')" />
+        <div class="badge">🌊 Relax</div>
+      </div>
+      <div class="photo-cell">
+        <img src="photos/photo5.jpg" alt="Foto 5" onclick="openLightbox('photos/photo5.jpg')" />
+        <div class="badge">☀️ Estate</div>
+      </div>
+    </div>
+
+    <!-- About / Tags -->
+    <div class="about">
+      <h3>Su di me</h3>
+      <div class="tags">
+        <div class="tag"><span>🎸</span> Musica</div>
+        <div class="tag"><span>🤿</span> Snorkeling</div>
+        <div class="tag"><span>✈️</span> Viaggi</div>
+        <div class="tag"><span>📱</span> Tech</div>
+        <div class="tag"><span>🌊</span> Mare</div>
+        <div class="tag"><span>☕</span> Aperitivo</div>
+      </div>
+    </div>
+
+    <!-- Nanobanana attribution -->
+    <div class="nb-badge">
+      🍌 Portfolio generato con <strong>Nanobanana</strong>
+    </div>
+
+  </main>
+
+  <!-- Lightbox -->
+  <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+    <button class="lightbox-close" onclick="closeLightbox()">×</button>
+    <img id="lightboxImg" src="" alt="" />
+  </div>
+
+  <script>
+    function openLightbox(src) {
+      document.getElementById('lightboxImg').src = src;
+      document.getElementById('lightbox').classList.add('open');
+    }
+    function closeLightbox() {
+      document.getElementById('lightbox').classList.remove('open');
+    }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+  </script>
+
+</body>
+</html>
