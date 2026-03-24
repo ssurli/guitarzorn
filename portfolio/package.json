@@ -1,0 +1,12 @@
+{
+  "name": "tinder-portfolio-nanobanana",
+  "version": "1.0.0",
+  "description": "Tinder photo portfolio enhanced with Nanobanana (Gemini 2.5 Flash Image)",
+  "type": "module",
+  "scripts": {
+    "enhance": "node enhance.js"
+  },
+  "dependencies": {
+    "@google/genai": "^1.0.0"
+  }
+}
