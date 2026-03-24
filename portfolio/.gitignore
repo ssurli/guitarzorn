@@ -1,7 +1,0 @@
-node_modules/
-input/
-photos/*.jpg
-photos/*.jpeg
-photos/*.png
-photos/*.webp
-.env
