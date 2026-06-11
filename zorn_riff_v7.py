@@ -51,13 +51,12 @@ def get_note_color(note: str, velocity: str) -> Tuple[int, int, int]:
         c = zorn_blend(base, ZORN['white'], lum * 0.5)
     else:
         c = base
-    # C=ocra e G=oro su fondo ocra → shift di contrasto per renderli leggibili
+    # C=ocra su fondo ocra → raw sienna (ocra+vermilion caldo) per contrasto caldo
     if note == 'C':
-        # ocra fredda: mix verso nero (pennellata scura su campo caldo)
-        c = zorn_blend(c, ZORN['black'], 0.32)
+        c = zorn_blend(c, ZORN['vermilion'], 0.38)
     elif note == 'G':
-        # oro→ rosso caldo: pennellata distinta dall'ocra base
-        c = zorn_blend(c, ZORN['vermilion'], 0.30)
+        # oro → ambrato più caldo
+        c = zorn_blend(c, ZORN['vermilion'], 0.22)
     return c
 
 
@@ -490,19 +489,23 @@ class ZornOilPainting:
                                        dryness=0.10, smear=0.05, taper_end=0.42)
 
                 elif tech == 'tapping':
+                    # centro + 4 fiocchi a X più lunghi
+                    self.cv.stroke(x, y, aj, 18 * v, 24 * v, col,
+                                   opacity=0.99, thickness=2.4,
+                                   dryness=0.08, smear=0.04, taper_end=0.45)
                     for adeg in (45, 135, 225, 315):
                         a = math.radians(adeg) + aj
-                        self.cv.stroke(x + 10 * math.cos(a), y + 10 * math.sin(a),
-                                       a, 46 * v, 17, col,
-                                       opacity=0.96, thickness=1.9,
-                                       dryness=0.20, smear=0.05, taper_end=0.55)
+                        self.cv.stroke(x + 12 * math.cos(a), y + 12 * math.sin(a),
+                                       a, 60 * v, 19, col,
+                                       opacity=0.96, thickness=2.1,
+                                       dryness=0.18, smear=0.05, taper_end=0.52)
 
                 elif tech == 'dive':
                     self.cv.stroke(x, y, math.radians(10) + aj,
-                                   255 * v, 33 * v, col,
-                                   opacity=0.96, thickness=2.1,
-                                   curvature=1.15, dryness=0.40,
-                                   smear=0.07, taper_end=0.88)
+                                   270 * v, 36 * v, col,
+                                   opacity=0.97, thickness=2.3,
+                                   curvature=1.15, dryness=0.38,
+                                   smear=0.06, taper_end=0.88)
 
                 elif tech == 'harmonic_natural':
                     hcol = zorn_blend(ZORN['white'], ZORN['ochre'], 0.08)
