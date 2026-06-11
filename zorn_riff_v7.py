@@ -134,23 +134,25 @@ class OilCanvas:
         self.color = np.empty((H, W, 3), np.float32)
         self.color[:] = base
 
-        # ── trama tessuta (ordito + trama) ──────────────────────────────────
+        # ── trama tessuta — molto sottile (fondo liscio come tavola preparata)
         yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
-        sp = 4.6  # passo dei fili in px
-        warp = np.sin(xx * (2 * np.pi / sp) + np.sin(yy * 0.71) * 0.8)
-        weft = np.sin(yy * (2 * np.pi / (sp * 1.09)) + np.sin(xx * 0.53) * 0.8)
+        sp = 6.0
+        warp = np.sin(xx * (2 * np.pi / sp) + np.sin(yy * 0.55) * 0.6)
+        weft = np.sin(yy * (2 * np.pi / (sp * 1.12)) + np.sin(xx * 0.42) * 0.6)
         weave = (warp * 0.5 + 0.5) * 0.55 + (weft * 0.5 + 0.5) * 0.45
-        weave += self.rng.standard_normal((H, W)).astype(np.float32) * 0.10
-        weave = blur(weave, 1)
+        weave += self.rng.standard_normal((H, W)).astype(np.float32) * 0.06
+        weave = blur(weave, 2)
         weave -= weave.min()
         weave /= max(weave.max(), 1e-6)
-        self.weave = weave                       # 0..1, per il dry-brush
-        self.height = weave * 0.32               # rilievo base della tela
+        self.weave = weave
+        self.height = np.zeros((H, W), np.float32)  # tela piatta: solo l'impasto conta
 
-        # mottling cromatico del fondo (tela non uniforme)
-        mot = blur(self.rng.standard_normal((H, W)).astype(np.float32), 55)
-        mot /= max(np.abs(mot).max(), 1e-6)
-        self.color += mot[..., None] * 0.035
+        # mottling anisotropico: larghe variazioni orizzontali, piccole verticali
+        # → le pennellate del ground affiorano come nel riferimento
+        mx = blur(self.rng.standard_normal((H, W)).astype(np.float32), 90)
+        my = _box(mx, 4, 0)                          # schiaccia la variazione verticale
+        my /= max(np.abs(my).max(), 1e-6)
+        self.color += my[..., None] * 0.040          # leggerissima ondulazione calda
         self.color = np.clip(self.color, 0, 1)
 
     # ── pennellata ────────────────────────────────────────────────────────────
@@ -270,16 +272,16 @@ class OilCanvas:
         self.height[y0:y1, x0:x1] += hadd
 
     # ── rendering finale con illuminazione ───────────────────────────────────
-    def render(self, light=(-0.48, -0.62, 0.78),
-               relief: float = 2.3, ambient: float = 0.42,
-               spec_strength: float = 0.30, shininess: float = 26.0
+    def render(self, light=(-0.40, -0.55, 0.82),
+               relief: float = 0.9, ambient: float = 0.68,
+               spec_strength: float = 0.08, shininess: float = 18.0
                ) -> Image.Image:
         """
         Pass di relief lighting: normali dal gradiente del height-field,
         diffusa + speculare Blinn-Phong, occlusione leggera nelle valli.
         Qui nasce l'effetto olio: la luce rivela impasto e trama.
         """
-        h = blur(self.height, 1)
+        h = blur(self.height, 1.5)
         gy, gx = np.gradient(h)
         nx = -gx * relief
         ny = -gy * relief
@@ -319,7 +321,9 @@ class ZornOilPainting:
 
     def __init__(self, seed: int = 42):
         random.seed(seed)
-        bg = zorn_blend(ZORN['ochre'], ZORN['vermilion'], 0.04)
+        # fondo: ocra gialla satura (Naples yellow caldo, come nel riferimento)
+        bg = zorn_blend(ZORN['ochre'], ZORN['white'], 0.18)
+        bg = zorn_blend(bg, (230, 180, 40), 0.30)   # shift verso giallo cadmio
         self.cv = OilCanvas(self.W, self.H, bg, seed)
 
     # coordinate musicali (come v6)
@@ -344,60 +348,57 @@ class ZornOilPainting:
             zorn_blend(ZORN['ochre'], ZORN['vermilion'], 0.07),
         ]
 
-        # Passata 1 — copertura completa: righe sovrapposte di pennellate
-        # larghe, ogni riga sfalsata; nessuna zona di tela "piatta".
-        y = -25.0
-        while y < self.H + 25:
-            x = random.uniform(-220, -60)
-            while x < self.W + 40:
-                L = random.uniform(280, 520)
+        # Passata unica: larghissime e quasi opache (stesura piatta,
+        # come un'imprimitura a olio su tavola liscia).
+        y = -20.0
+        while y < self.H + 20:
+            x = random.uniform(-300, -80)
+            while x < self.W + 50:
+                L = random.uniform(350, 700)
                 self.cv.stroke(
-                    x=x, y=y + random.gauss(0, 9),
-                    angle=random.gauss(0.0, 0.07),
+                    x=x, y=y + random.gauss(0, 6),
+                    angle=random.gauss(0.0, 0.04),
                     length=L,
-                    width=random.uniform(30, 50),
+                    width=random.uniform(40, 70),
                     color=random.choice(base_cols),
-                    opacity=random.uniform(0.72, 0.95),
-                    thickness=random.uniform(0.45, 0.85),
-                    curvature=random.gauss(0, 0.08),
-                    dryness=random.uniform(0.20, 0.42),
-                    smear=random.uniform(0.35, 0.55),
-                    taper_end=random.uniform(0.35, 0.6),
+                    opacity=random.uniform(0.55, 0.78),
+                    thickness=random.uniform(0.12, 0.28),
+                    curvature=random.gauss(0, 0.04),
+                    dryness=random.uniform(0.55, 0.78),
+                    smear=random.uniform(0.20, 0.38),
+                    taper_end=random.uniform(0.50, 0.80),
                 )
-                x += L * random.uniform(0.55, 0.8)
-            y += random.uniform(24, 36)
+                x += L * random.uniform(0.65, 0.90)
+            y += random.uniform(30, 46)
 
-        # Passata 2 — accenti sparsi: luci, ombre, calore (testura viva).
-        accents = [
-            (zorn_blend(ZORN['ochre'], ZORN['white'], 0.26),     16),
-            (zorn_blend(ZORN['ochre'], ZORN['black'], 0.16),     12),
-            (zorn_blend(ZORN['ochre'], ZORN['vermilion'], 0.10),  9),
-            (zorn_blend(ZORN['white'], ZORN['ochre'], 0.40),      6),
-        ]
-        for col, count in accents:
+        # Accenti lievi di calore/luce (pochissimi, quasi invisibili)
+        for col, count in [
+            (zorn_blend(ZORN['ochre'], ZORN['white'],     0.30), 8),
+            (zorn_blend(ZORN['ochre'], ZORN['vermilion'], 0.08), 6),
+        ]:
             for _ in range(count):
                 self.cv.stroke(
-                    x=random.uniform(-60, self.W + 30),
-                    y=random.uniform(-20, self.H + 20),
-                    angle=random.gauss(0.0, 0.12),
-                    length=random.uniform(140, 380),
-                    width=random.uniform(16, 34),
+                    x=random.uniform(0, self.W),
+                    y=random.uniform(0, self.H),
+                    angle=random.gauss(0.0, 0.08),
+                    length=random.uniform(120, 280),
+                    width=random.uniform(18, 38),
                     color=col,
-                    opacity=random.uniform(0.45, 0.72),
-                    thickness=random.uniform(0.5, 1.0),
-                    curvature=random.gauss(0, 0.14),
-                    dryness=random.uniform(0.40, 0.70),
-                    smear=random.uniform(0.4, 0.6),
-                    taper_end=random.uniform(0.5, 0.85),
+                    opacity=random.uniform(0.22, 0.44),
+                    thickness=random.uniform(0.08, 0.18),
+                    curvature=random.gauss(0, 0.10),
+                    dryness=random.uniform(0.60, 0.85),
+                    smear=random.uniform(0.25, 0.45),
+                    taper_end=random.uniform(0.6, 0.92),
                 )
 
     # ── segni del riff ────────────────────────────────────────────────────────
     # Ogni nota viene ripetuta N_REP volte con jitter di posizione/angolo.
     # Come un pittore che ritorna più volte sulla stessa zona costruendo impasto.
-    _N_REP = 5        # passate per nota comune
-    _N_REP_PC = 8     # passate extra per il powerchord (climax)
-    _J_POS   = 7.0    # sigma jitter posizione (px)
-    _J_ANG   = 0.06   # sigma jitter angolo (rad)
+    _N_REP = 2        # pennellate per nota (piccole, non costruite a strati)
+    _N_REP_PC = 4     # powerchord leggermente più presente
+    _J_POS   = 3.5    # sigma jitter posizione (px)
+    _J_ANG   = 0.04   # sigma jitter angolo (rad)
 
     def riff_marks(self, notes: List[Dict]):
         for i, nd in enumerate(notes):
@@ -424,105 +425,98 @@ class ZornOilPainting:
                 aj  = random.gauss(0, self._J_ANG)
 
                 if tech == 'staccato':
-                    for L, Wd, off, ao in [
-                            (115, 46, 0, 0.0), (85, 34, 12, 0.05), (65, 26, -8, -0.04)]:
-                        self.cv.stroke(x + off, y + off * 0.3,
-                                       math.radians(-35) + aj + ao,
-                                       L * v, Wd * v, col,
-                                       opacity=0.98, thickness=2.5,
-                                       dryness=0.12, smear=0.05, taper_end=0.30)
+                    # dab ovale, carico (come i segni ovali scuri nel riferimento)
+                    self.cv.stroke(x, y, math.radians(-30) + aj,
+                                   68 * v, 30 * v, col,
+                                   opacity=0.93, thickness=0.95,
+                                   dryness=0.42, smear=0.08, taper_end=0.52)
 
                 elif tech == 'legato':
-                    for pw, pth, pop in [(40 * v, 2.4, 0.98), (24 * v, 1.4, 0.74)]:
-                        self.cv.stroke(x, y,
-                                       ang_next + aj,
-                                       (250 + 140 * dur) * v, pw, col,
-                                       opacity=pop, thickness=pth,
-                                       curvature=random.gauss(0, 0.18),
-                                       dryness=0.25, smear=0.06, taper_end=0.68)
+                    # tratto morbido verso la nota seguente
+                    self.cv.stroke(x, y, ang_next + aj,
+                                   (175 + 95 * dur) * v, 26 * v, col,
+                                   opacity=0.88, thickness=0.72,
+                                   curvature=random.gauss(0, 0.14),
+                                   dryness=0.45, smear=0.08, taper_end=0.70)
 
                 elif tech == 'slide':
-                    for off, opac, th, wd in [(-20, 0.74, 1.0, 12),
-                                               (  0, 0.99, 2.2, 20),
-                                               ( 20, 0.70, 0.9, 11)]:
+                    # tre parallele diagonali, centrale dominante
+                    for off, opac, wd in [(-14, 0.66, 8),
+                                           (  0, 0.90, 17),
+                                           ( 14, 0.62, 7)]:
                         self.cv.stroke(x, y + off, math.radians(-15) + aj,
-                                       240 * v, wd, col,
-                                       opacity=opac, thickness=th,
-                                       dryness=0.40, smear=0.05, taper_end=0.80)
+                                       165 * v, wd, col,
+                                       opacity=opac, thickness=0.62,
+                                       dryness=0.52, smear=0.06, taper_end=0.80)
 
                 elif tech == 'hammer_on':
-                    self.cv.stroke(x, y, aj, 22 * v, 28 * v, col,
-                                   opacity=0.98, thickness=2.2,
-                                   dryness=0.10, smear=0.04, taper_end=0.50)
+                    # stella di dab radiali
                     for adeg in (0, 60, 120, 180, 240, 300):
                         a = math.radians(adeg) + aj
-                        self.cv.stroke(x + 14 * math.cos(a), y + 14 * math.sin(a),
-                                       a, 55 * v, 22 * v, col,
-                                       opacity=0.96, thickness=2.1,
-                                       dryness=0.15, smear=0.05, taper_end=0.45)
+                        self.cv.stroke(x + 10 * math.cos(a), y + 10 * math.sin(a),
+                                       a, 44 * v, 16 * v, col,
+                                       opacity=0.90, thickness=0.82,
+                                       dryness=0.38, smear=0.06, taper_end=0.52)
 
                 elif tech == 'bend':
-                    self.cv.stroke(x, y, math.radians(-40) + aj,
-                                   195 * v, 38 * v, col,
-                                   opacity=0.98, thickness=2.5,
-                                   curvature=-1.35, dryness=0.20,
-                                   smear=0.06, taper_end=0.55)
-                    self.cv.stroke(x + 3, y - 4, math.radians(-38) + aj,
-                                   160 * v, 22 * v,
-                                   zorn_blend(col, ZORN['white'], 0.25),
-                                   opacity=0.72, thickness=1.2,
-                                   curvature=-1.20, dryness=0.30,
-                                   smear=0.05, taper_end=0.65)
+                    # arco curvo, morbido
+                    self.cv.stroke(x, y, math.radians(-35) + aj,
+                                   142 * v, 28 * v, col,
+                                   opacity=0.92, thickness=0.88,
+                                   curvature=-1.20, dryness=0.36,
+                                   smear=0.07, taper_end=0.60)
 
                 elif tech == 'vibrato':
+                    # onda sinusoidale
                     self.cv.stroke(x, y, aj,
-                                   (185 + 110 * dur) * v, 30 * v, col,
-                                   opacity=0.97, thickness=2.2,
-                                   waviness=13.0, wave_freq=5.0,
-                                   dryness=0.22, smear=0.06, taper_end=0.52)
+                                   (155 + 88 * dur) * v, 23 * v, col,
+                                   opacity=0.92, thickness=0.84,
+                                   waviness=9.0, wave_freq=5.0,
+                                   dryness=0.36, smear=0.07, taper_end=0.56)
 
                 elif tech == 'powerchord':
-                    for dyy, ww in [(-56, 44 * v), (0, 50 * v), (56, 44 * v)]:
-                        self.cv.stroke(x - 25, y + dyy, aj,
-                                       278 * v, ww, col,
-                                       opacity=0.99, thickness=2.8,
-                                       dryness=0.10, smear=0.05, taper_end=0.42)
+                    # blocco dominante: tre lastre (il segno più grande)
+                    for dyy, ww in [(-36, 32 * v), (0, 40 * v), (36, 32 * v)]:
+                        self.cv.stroke(x - 18, y + dyy, aj,
+                                       195 * v, ww, col,
+                                       opacity=0.96, thickness=1.25,
+                                       dryness=0.20, smear=0.06, taper_end=0.46)
 
                 elif tech == 'tapping':
-                    # centro + 4 fiocchi a X più lunghi
-                    self.cv.stroke(x, y, aj, 18 * v, 24 * v, col,
-                                   opacity=0.99, thickness=2.4,
-                                   dryness=0.08, smear=0.04, taper_end=0.45)
+                    # 4 tratti a X, secchi
                     for adeg in (45, 135, 225, 315):
                         a = math.radians(adeg) + aj
-                        self.cv.stroke(x + 12 * math.cos(a), y + 12 * math.sin(a),
-                                       a, 60 * v, 19, col,
-                                       opacity=0.96, thickness=2.1,
-                                       dryness=0.18, smear=0.05, taper_end=0.52)
+                        self.cv.stroke(x + 8 * math.cos(a), y + 8 * math.sin(a),
+                                       a, 48 * v, 14, col,
+                                       opacity=0.90, thickness=0.88,
+                                       dryness=0.40, smear=0.06, taper_end=0.56)
 
                 elif tech == 'dive':
-                    self.cv.stroke(x, y, math.radians(10) + aj,
-                                   270 * v, 36 * v, col,
-                                   opacity=0.97, thickness=2.3,
-                                   curvature=1.15, dryness=0.38,
-                                   smear=0.06, taper_end=0.88)
+                    # curva discendente, leggera
+                    self.cv.stroke(x, y, math.radians(8) + aj,
+                                   195 * v, 25 * v, col,
+                                   opacity=0.90, thickness=0.84,
+                                   curvature=1.10, dryness=0.48,
+                                   smear=0.07, taper_end=0.86)
 
                 elif tech == 'harmonic_natural':
-                    hcol = zorn_blend(ZORN['white'], ZORN['ochre'], 0.08)
+                    # tre tratti bianchi etereo
+                    hcol = zorn_blend(ZORN['white'], ZORN['ochre'], 0.05)
                     for adeg in (30, 150, 270):
                         a = math.radians(adeg) + aj
-                        self.cv.stroke(x + 22 * math.cos(a), y + 22 * math.sin(a),
-                                       a, 90, 40, hcol,
-                                       opacity=0.97, thickness=2.0,
-                                       dryness=0.25, smear=0.05, taper_end=0.70)
+                        self.cv.stroke(x + 16 * math.cos(a), y + 16 * math.sin(a),
+                                       a, 72, 27, hcol,
+                                       opacity=0.90, thickness=0.74,
+                                       dryness=0.40, smear=0.06, taper_end=0.70)
 
                 elif tech == 'harmonic_artificial':
+                    # 4 scintille brevi
                     for adeg in (0, 90, 180, 270):
                         a = math.radians(adeg) + aj
-                        self.cv.stroke(x + 8 * math.cos(a), y + 8 * math.sin(a),
-                                       a, 40, 13, col,
-                                       opacity=0.96, thickness=1.8,
-                                       dryness=0.30, smear=0.05, taper_end=0.75)
+                        self.cv.stroke(x + 7 * math.cos(a), y + 7 * math.sin(a),
+                                       a, 34, 11, col,
+                                       opacity=0.86, thickness=0.72,
+                                       dryness=0.48, smear=0.06, taper_end=0.78)
 
     # ── dati riff ─────────────────────────────────────────────────────────────
     def parse_riff(self) -> List[Dict]:
@@ -553,11 +547,16 @@ class ZornOilPainting:
         notes = self.parse_riff()
         print("Ground (campo ocra a impasto)...")
         self.ground()
+        # Sfuma leggermente il buffer colore dopo il ground per ammorbidire
+        # le striature delle pennellate del fondo (come una velatura finale
+        # sull'imprimitura prima di iniziare a dipingere i segni).
+        # due passaggi: uno trasversale + uno lungo per le striature orizzontali
+        self.cv.color = blur(self.cv.color, 14.0)
+        self.cv.color = np.clip(self.cv.color, 0, 1)
         print("Segni del riff...")
         self.riff_marks(notes)
         print("Relief lighting (diffusa + speculare + AO)...")
-        img = self.cv.render(relief=3.4, ambient=0.38,
-                             spec_strength=0.50, shininess=30.0)
+        img = self.cv.render()
         img.save(out, dpi=(150, 150))
         print(f"\nArtwork v7 salvato: {out}")
 
