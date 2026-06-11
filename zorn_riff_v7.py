@@ -412,17 +412,20 @@ class ZornOilPainting:
 
             elif tech == 'legato':
                 self.cv.stroke(x, y, ang_next + random.gauss(0, 0.05),
-                               (220 + 130 * dur) * v, 32 * v, col,
-                               opacity=0.95, thickness=1.8,
-                               curvature=random.gauss(0, 0.25),
-                               dryness=0.35, smear=0.45, taper_end=0.75)
+                               (240 + 140 * dur) * v, 36 * v, col,
+                               opacity=0.97, thickness=2.2,
+                               curvature=random.gauss(0, 0.22),
+                               dryness=0.30, smear=0.30, taper_end=0.70)
 
             elif tech == 'slide':
-                for off in (-20, 0, 20):
+                # tre parallele sottili con la centrale dominante
+                for off, opac, th, wd in [(-18, 0.72, 0.9, 11),
+                                          (  0, 0.97, 2.0, 18),
+                                          ( 18, 0.68, 0.8, 10)]:
                     self.cv.stroke(x, y + off, math.radians(-15),
-                                   230 * v, 15, col,
-                                   opacity=0.88, thickness=1.2,
-                                   dryness=0.50, smear=0.35, taper_end=0.85)
+                                   235 * v, wd, col,
+                                   opacity=opac, thickness=th,
+                                   dryness=0.45, smear=0.22, taper_end=0.82)
 
             elif tech == 'hammer_on':
                 for adeg in (0, 60, 120, 180, 240, 300):
@@ -471,13 +474,22 @@ class ZornOilPainting:
                                smear=0.4, taper_end=0.9)
 
             elif tech == 'harmonic_natural':
-                # velature chiare ma presenti: aloni di bianco sul campo
+                # E = bianco su ocra: forza il bianco puro per renderlo visibile;
+                # tre raggi formano un alone etereo ma leggibile.
+                hcol = zorn_blend(ZORN['white'], col, 0.18)
                 for adeg in (30, 150, 270):
                     a = math.radians(adeg)
-                    self.cv.stroke(x + 24 * math.cos(a), y + 24 * math.sin(a),
-                                   a, 75, 34, col,
-                                   opacity=0.70, thickness=0.9,
-                                   dryness=0.45, smear=0.45, taper_end=0.8)
+                    self.cv.stroke(x + 28 * math.cos(a), y + 28 * math.sin(a),
+                                   a, 95, 42, hcol,
+                                   opacity=0.95, thickness=1.8,
+                                   dryness=0.35, smear=0.35, taper_end=0.75)
+                # velatura più sottile (glow interno)
+                for adeg in (90, 210, 330):
+                    a = math.radians(adeg)
+                    self.cv.stroke(x + 12 * math.cos(a), y + 12 * math.sin(a),
+                                   a, 42, 22, hcol,
+                                   opacity=0.62, thickness=0.8,
+                                   dryness=0.58, smear=0.52, taper_end=0.90)
 
             elif tech == 'harmonic_artificial':
                 for adeg in (0, 90, 180, 270):
@@ -519,7 +531,8 @@ class ZornOilPainting:
         print("Segni del riff...")
         self.riff_marks(notes)
         print("Relief lighting (diffusa + speculare + AO)...")
-        img = self.cv.render()
+        img = self.cv.render(relief=3.4, ambient=0.38,
+                             spec_strength=0.50, shininess=30.0)
         img.save(out, dpi=(150, 150))
         print(f"\nArtwork v7 salvato: {out}")
 
