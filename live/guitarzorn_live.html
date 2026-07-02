@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>guitarzorn — live painter</title>
+<style>
+  :root{
+    --bg:#171310; --panel:#211b15; --ink:#d8cbb4; --dim:#8a7c66;
+    --accent:#e34234;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--bg); color:var(--ink);
+    font:14px/1.45 "Georgia", "Times New Roman", serif;
+    display:flex; flex-direction:column; align-items:center;
+    min-height:100vh; padding:14px 18px 10px;
+    background-image:radial-gradient(1200px 600px at 50% -200px, #241d15 0%, #171310 70%);
+  }
+  header{
+    width:100%; max-width:1400px; display:flex; align-items:baseline;
+    justify-content:space-between; gap:16px; margin-bottom:10px; flex-wrap:wrap;
+  }
+  h1{font-size:19px; font-weight:normal; letter-spacing:.06em; color:var(--ink)}
+  h1 b{color:var(--accent); font-weight:normal}
+  h1 small{color:var(--dim); font-size:12px; margin-left:10px; letter-spacing:.12em}
+  .btns{display:flex; gap:8px; align-items:center}
+  button{
+    font:12px/1 "Georgia", serif; letter-spacing:.08em;
+    color:var(--ink); background:var(--panel);
+    border:1px solid #3a3025; border-radius:3px;
+    padding:8px 14px; cursor:pointer; transition:all .15s;
+  }
+  button:hover{border-color:#6a5a42; background:#2a2219}
+  button:disabled{opacity:.45; cursor:default}
+  button.primary{border-color:#7a3a30; color:#f0dcc8}
+  #stage{
+    position:relative; width:100%; max-width:1400px;
+  }
+  canvas#tela{
+    display:block; width:100%; height:auto;
+    background:#c9a86a;
+    box-shadow:0 2px 8px rgba(0,0,0,.7), 0 12px 44px rgba(0,0,0,.55), inset 0 0 0 1px #000;
+    border:6px solid #0d0a07; outline:1px solid #3a3025;
+  }
+  #veil{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background:rgba(18,14,10,.55); color:var(--ink); letter-spacing:.2em; font-size:13px;
+    opacity:0; pointer-events:none; transition:opacity .25s;
+  }
+  #veil.on{opacity:1}
+  footer{
+    width:100%; max-width:1400px; margin-top:10px;
+    display:flex; justify-content:space-between; align-items:center; gap:14px; flex-wrap:wrap;
+  }
+  #legend{display:flex; gap:18px; flex-wrap:wrap}
+  .chip{display:flex; align-items:center; gap:7px; color:var(--dim); font-size:12px}
+  .chip .dot{width:15px; height:15px; border-radius:50%; box-shadow:inset 0 -2px 3px rgba(0,0,0,.35), 0 0 0 1px rgba(0,0,0,.5)}
+  .chip b{color:var(--ink); font-size:13px}
+  .chip .keys{font-family:ui-monospace, Menlo, monospace; font-size:11px; letter-spacing:.1em}
+  #status{color:var(--dim); font-size:11px; letter-spacing:.08em; text-align:right}
+  #hint{color:var(--dim); font-size:11px; letter-spacing:.06em; width:100%; text-align:center; margin-top:6px}
+  kbd{font-family:ui-monospace, Menlo, monospace; background:#241d15; border:1px solid #3a3025; border-radius:3px; padding:0 4px; font-size:10px}
+</style>
+</head>
+<body>
+<header>
+  <h1><b>guitarzorn</b> live <small>PENTATONICA DI LA &middot; PALETTE ZORN &middot; OLIO VIRTUALE</small></h1>
+  <div class="btns">
+    <button id="btnNew">Nuova tela</button>
+    <button id="btnSave">Salva PNG</button>
+    <button id="btnDemo" class="primary">Demo: Johnny B. Goode</button>
+  </div>
+</header>
+
+<div id="stage">
+  <canvas id="tela" width="1400" height="900"></canvas>
+  <div id="veil" class="on">preparo la tela&hellip;</div>
+</div>
+
+<footer>
+  <div id="legend"></div>
+  <div id="status">MIDI: &mdash;</div>
+</footer>
+<div id="hint">
+  Suona con la tastiera: riga centrale <kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><kbd>F</kbd><kbd>G</kbd> = ottava media,
+  <kbd>W</kbd><kbd>E</kbd><kbd>R</kbd><kbd>T</kbd><kbd>Y</kbd> = ottava sopra,
+  <kbd>Z</kbd><kbd>X</kbd><kbd>C</kbd><kbd>V</kbd><kbd>B</kbd> = ottava sotto.
+  Tieni premuto: il tratto si allunga. <kbd>Shift</kbd> o ribattuta rapida = fortissimo (tratti a frusta con schizzi).
+</div>
+
+<script>
+'use strict';
+/* ============================================================================
+   guitarzorn live — porting JavaScript del motore OilCanvas di zorn_riff_v7.py
+   height-field + relief lighting incrementale (Hertzmann 2002, report Agente 3)
+   + mixing Kubelka-Munk single-constant a 4 pigmenti Zorn (report Agente 1, T1)
+   + mapping musica->pittura deterministico (report Agente 2)
+   ========================================================================= */
+
+const W = 1400, H = 900;
+const cvEl = document.getElementById('tela');
+const ctx = cvEl.getContext('2d');
+const img = ctx.createImageData(W, H);
+
+/* ---------- RNG deterministico ------------------------------------------ */
+let _seed = 42;
+function mulberry32(a){ return function(){
+  a |= 0; a = (a + 0x6D2B79F5) | 0;
+  let t = Math.imul(a ^ (a >>> 15), 1 | a);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};}
+let rand = mulberry32(_seed);
+
+/* ============================================================================
+   1. PALETTE ZORN + KUBELKA-MUNK (single-constant, 4 pigmenti)
+   KS = (1-R)^2 / (2R) ; mix lineare dei K/S ; R' = 1 + KS - sqrt(KS^2 + 2 KS)
+   Ogni pixel della tela e' un vettore di CONCENTRAZIONI (ocra, vermiglio,
+   nero avorio, bianco titanio) che somma a 1: il compositing avviene in
+   spazio-concentrazione (= mixing KM), l'RGB nasce solo al momento della luce.
+   ========================================================================= */
+const PIG_RGB = [ [196,164,106], [227,66,52], [28,28,28], [242,242,242] ];
+const KS = new Float32Array(12);          // [pigmento*3 + canale]
+for (let p = 0; p < 4; p++)
+  for (let ch = 0; ch < 3; ch++){
+    const R = Math.min(0.985, Math.max(0.012, PIG_RGB[p][ch] / 255));
+    KS[p*3 + ch] = (1 - R) * (1 - R) / (2 * R);
+  }
+
+function concToRGB(c0, c1, c2, c3, out){    // out: array len>=3, valori 0..1
+  for (let ch = 0; ch < 3; ch++){
+    const ks = c0*KS[ch] + c1*KS[3+ch] + c2*KS[6+ch] + c3*KS[9+ch];
+    let r = 1 + ks - Math.sqrt(ks*ks + 2*ks);
+    out[ch] = r < 0 ? 0 : (r > 1 ? 1 : r);
+  }
+}
+const _rgbTmp = [0,0,0];
+function fitConc(r, g, b){                  // inversione numerica RGB->conc
+  const tr = r/255, tg = g/255, tb = b/255;
+  const frng = mulberry32(1234);
+  let c = [0.25, 0.25, 0.25, 0.25];
+  const err = cc => { concToRGB(cc[0],cc[1],cc[2],cc[3],_rgbTmp);
+    const dr=_rgbTmp[0]-tr, dg=_rgbTmp[1]-tg, db=_rgbTmp[2]-tb;
+    return dr*dr + dg*dg + db*db; };
+  let best = err(c);
+  for (let i = 0; i < 6000; i++){
+    const a = (frng()*4)|0; let bI = (frng()*4)|0; if (bI===a) bI = (a+1)&3;
+    const amt = (frng()-0.5) * 0.25;
+    const t = c.slice();
+    t[a] = Math.max(0, t[a] - amt); t[bI] = Math.max(0, t[bI] + amt);
+    const s = t[0]+t[1]+t[2]+t[3]; if (s < 1e-6) continue;
+    for (let k=0;k<4;k++) t[k] /= s;
+    const e = err(t); if (e < best){ best = e; c = t; }
+  }
+  return c;
+}
+function mixConc(a, b, t){                  // mix KM = lerp in concentrazione
+  return [ a[0]*(1-t)+b[0]*t, a[1]*(1-t)+b[1]*t,
+           a[2]*(1-t)+b[2]*t, a[3]*(1-t)+b[3]*t ];
+}
+const C_OCHRE = [1,0,0,0], C_VERM = [0,1,0,0], C_BLACK = [0,0,1,0], C_WHITE = [0,0,0,1];
+
+/* colori nota (mapping ufficiale v2, report Agente 2) */
+const C_SIENNA = fitConc(208, 127, 85);     // C = raw sienna (ocra+38% verm)
+const C_GOLD   = fitConc(222, 124, 68);     // G = oro ambrato caldo
+const C_GREY   = mixConc(C_BLACK, C_WHITE, 0.55);
+const PC_CONC = [];                          // pitch class -> concentrazioni
+PC_CONC[0]=C_SIENNA; PC_CONC[1]=C_SIENNA;
+PC_CONC[2]=C_BLACK;  PC_CONC[3]=mixConc(C_BLACK,C_WHITE,0.22);
+PC_CONC[4]=C_WHITE;  PC_CONC[5]=C_GREY; PC_CONC[6]=C_GREY;
+PC_CONC[7]=C_GOLD;   PC_CONC[8]=mixConc(C_GOLD,C_BLACK,0.3);
+PC_CONC[9]=C_VERM;   PC_CONC[10]=mixConc(C_VERM,C_BLACK,0.4);
+PC_CONC[11]=mixConc(C_SIENNA,C_BLACK,0.35);
+const PC_NAME = {0:'C',2:'D',4:'E',7:'G',9:'A'};
+
+function noteConc(midi){                     // pitch class -> tinta, ottava -> luminosita'
+  const pc = ((midi % 12) + 12) % 12;
+  const oct = Math.floor(midi / 12) - 1;
+  let c = PC_CONC[pc];
+  const lum = Math.max(-0.36, Math.min(0.36, 0.12 * (oct - 4)));
+  if (lum > 0)      c = mixConc(c, C_WHITE, Math.min(lum * 0.9, 0.5));
+  else if (lum < 0) c = mixConc(c, C_BLACK, Math.min(-lum * 0.55, 0.32));
+  return c;
+}
+
+/* ============================================================================
+   2. TELA A OLIO — buffer concentrazioni + height-field + trama tessuta
+   ========================================================================= */
+const CONC  = new Float32Array(W * H * 4);   // pigmento per pixel (somma 1)
+const HGT   = new Float32Array(W * H);       // impasto
+const WEAVE = new Float32Array(W * H);       // trama procedurale (gate dry-brush)
+const S1 = new Float32Array(W * H), S2 = new Float32Array(W * H),
+      S3 = new Float32Array(W * H);          // scratch per il lighting
+
+/* box blur separabile su regione (running sum, O(n) indip. dal raggio) */
+function boxH(src, dst, w, h, r){
+  const inv = 1 / (2*r + 1);
+  for (let y = 0; y < h; y++){
+    const base = y * w;
+    let acc = src[base] * (r + 1);
+    for (let i = 1; i <= r; i++) acc += src[base + Math.min(i, w-1)];
+    for (let x = 0; x < w; x++){
+      dst[base + x] = acc * inv;
+      acc += src[base + Math.min(x + r + 1, w-1)] - src[base + Math.max(x - r, 0)];
+    }
+  }
+}
+function boxV(src, dst, w, h, r){
+  const inv = 1 / (2*r + 1);
+  for (let x = 0; x < w; x++){
+    let acc = src[x] * (r + 1);
+    for (let i = 1; i <= r; i++) acc += src[Math.min(i, h-1)*w + x];
+    for (let y = 0; y < h; y++){
+      dst[y*w + x] = acc * inv;
+      acc += src[Math.min(y + r + 1, h-1)*w + x] - src[Math.max(y - r, 0)*w + x];
+    }
+  }
+}
+function blurRegion(buf, w, h, r, passes){   // in place, usa S2 come scratch
+  for (let p = 0; p < passes; p++){ boxH(buf, S2, w, h, r); boxV(S2, buf, w, h, r); }
+}
+
+function buildWeave(){
+  const TAU = Math.PI * 2, sp = 6.0;
+  for (let y = 0; y < H; y++){
+    const sy = Math.sin(y * 0.55) * 0.6;
+    for (let x = 0; x < W; x++){
+      const warp = Math.sin(x * (TAU/sp) + sy);
+      const weft = Math.sin(y * (TAU/(sp*1.12)) + Math.sin(x*0.42)*0.6);
+      WEAVE[y*W + x] = (warp*0.5+0.5)*0.55 + (weft*0.5+0.5)*0.45 + (rand()-0.5)*0.12;
+    }
+  }
+  blurRegion(WEAVE, W, H, 2, 1);
+  let mn = 1e9, mx = -1e9;
+  for (let i = 0; i < W*H; i++){ const v = WEAVE[i]; if (v<mn) mn=v; if (v>mx) mx=v; }
+  const inv = 1 / Math.max(mx - mn, 1e-6);
+  for (let i = 0; i < W*H; i++) WEAVE[i] = (WEAVE[i] - mn) * inv;
+}
+
+/* ---------- dirty rect + relief lighting incrementale -------------------- */
+const dirty = { x0: W, y0: H, x1: -1, y1: -1 };
+function dirtyReset(){ dirty.x0 = W; dirty.y0 = H; dirty.x1 = -1; dirty.y1 = -1; }
+function dirtyAdd(x, y){
+  if (x < dirty.x0) dirty.x0 = x; if (x > dirty.x1) dirty.x1 = x;
+  if (y < dirty.y0) dirty.y0 = y; if (y > dirty.y1) dirty.y1 = y;
+}
+
+const LIGHT = (() => {                       // Blinn-Phong precomputato
+  let lx=-0.40, ly=-0.55, lz=0.82;
+  const ll = Math.hypot(lx,ly,lz); lx/=ll; ly/=ll; lz/=ll;
+  let hx=lx, hy=ly, hz=lz+1;
+  const hl = Math.hypot(hx,hy,hz); hx/=hl; hy/=hl; hz/=hl;
+  return { lx, ly, lz, hx, hy, hz };
+})();
+
+/* Ricalcola normali + diffusa + speculare + AO SOLO nel bbox (chiave del
+   real-time, report Agente 3): la luce e' funzione pura di (CONC,HGT,WEAVE). */
+function relightRegion(bx0, by0, bx1, by1){
+  const pad = 12;
+  const x0 = Math.max(0, bx0 - pad), y0 = Math.max(0, by0 - pad);
+  const x1 = Math.min(W, bx1 + pad + 1), y1 = Math.min(H, by1 + pad + 1);
+  const rw = x1 - x0, rh = y1 - y0;
+  if (rw <= 0 || rh <= 0) return;
+
+  // h effettiva: impasto + trama che affiora dove la pittura e' sottile (T5b)
+  for (let ly = 0; ly < rh; ly++){
+    const rowP = (y0 + ly) * W + x0, rowL = ly * rw;
+    for (let lx = 0; lx < rw; lx++){
+      const h = HGT[rowP + lx];
+      S1[rowL + lx] = h + WEAVE[rowP + lx] * 0.15 * Math.exp(-h / 0.35);
+    }
+  }
+  blurRegion(S1, rw, rh, 2, 2);              // ~ gauss sigma 1.5
+  boxH(S1, S2, rw, rh, 6); boxV(S2, S3, rw, rh, 6);   // base AO
+
+  const {lx:Lx, ly:Ly, lz:Lz, hx:Hx, hy:Hy, hz:Hz} = LIGHT;
+  const data = img.data;
+  for (let ly = 0; ly < rh; ly++){
+    const yA = y0 + ly, rowL = ly * rw;
+    const rNup = ly > 0 ? rowL - rw : rowL, rNdn = ly < rh-1 ? rowL + rw : rowL;
+    for (let lx = 0; lx < rw; lx++){
+      const i = rowL + lx;
+      const h = S1[i];
+      const gx = (S1[lx < rw-1 ? i+1 : i] - S1[lx > 0 ? i-1 : i]) * 0.5;
+      const gy = (S1[rNdn + lx] - S1[rNup + lx]) * 0.5;
+      const nx = -gx * 1.25, ny = -gy * 1.25;
+      const inv = 1 / Math.sqrt(nx*nx + ny*ny + 1);
+      let diff = (nx*Lx + ny*Ly + Lz) * inv; if (diff < 0) diff = 0;
+      let sp = (nx*Hx + ny*Hy + Hz) * inv; if (sp < 0) sp = 0;
+      const spec = Math.pow(sp, 18);
+      const gloss = 0.45 + 0.55 * Math.min(h / 2.2, 1);
+      let ao = (S3[i] - h) * 0.55; ao = ao < 0 ? 0 : (ao > 0.6 ? 0.6 : ao);
+      const q = (yA * W + x0 + lx) * 4;
+      concToRGB(CONC[q], CONC[q+1], CONC[q+2], CONC[q+3], _rgbTmp);
+      const lit = 0.68 + 0.32 * diff - ao * 0.55;
+      const add = spec * 0.115 * gloss * 255;
+      let r = _rgbTmp[0]*lit*255 + add, g = _rgbTmp[1]*lit*255 + add, b = _rgbTmp[2]*lit*255 + add;
+      data[q]   = r < 0 ? 0 : (r > 255 ? 255 : r);
+      data[q+1] = g < 0 ? 0 : (g > 255 ? 255 : g);
+      data[q+2] = b < 0 ? 0 : (b > 255 ? 255 : b);
+      data[q+3] = 255;
+    }
+  }
+  // scrive solo l'interno (il bordo della regione ha blur clampato -> cuciture)
+  const wx0 = x0 === 0 ? 0 : x0 + 4, wy0 = y0 === 0 ? 0 : y0 + 4;
+  const wx1 = x1 === W ? W : x1 - 4, wy1 = y1 === H ? H : y1 - 4;
+  if (wx1 > wx0 && wy1 > wy0)
+    ctx.putImageData(img, 0, 0, wx0, wy0, wx1 - wx0, wy1 - wy0);
+}
+
+/* ============================================================================
+   3. PENNELLATA — port incrementale di OilCanvas.stroke()
+   Ogni step = 1 px di traiettoria; una stampata di nS setole perpendicolari.
+   Attacco/rilascio, carico per-setola, striature persistenti, esaurimento,
+   dry-brush sulla trama, smearing EMA, aratura della pasta (creste, T2).
+   ========================================================================= */
+const _dc = [0,0,0,0];
+function makeStroke(o){
+  const width = Math.max(3, o.width);
+  const nS = Math.max(7, Math.round(width * 1.7));
+  const bristle = new Float32Array(nS), streakB = new Float32Array(nS);
+  const raw = new Float32Array(nS + 2);
+  for (let j = 0; j < nS + 2; j++) raw[j] = rand();
+  for (let j = 0; j < nS; j++){
+    const load = raw[j]*0.25 + raw[j+1]*0.5 + raw[j+2]*0.25;
+    bristle[j] = 0.45 + 0.55 * load;
+    streakB[j] = 0.82 + 0.36 * rand();       // solco persistente per-setola (T4)
+  }
+  return {
+    x: o.x, y: o.y, ang: o.angle, curvRate: o.curvRate || 0,
+    wav: o.waviness || 0, wavLen: o.waveLen || 42,
+    width, nS, bristle, streakB,
+    conc: o.conc, carried: o.conc.slice(),
+    opacity: o.opacity !== undefined ? o.opacity : 0.9,
+    thickness: o.thickness !== undefined ? o.thickness : 1,
+    dry: o.dryness !== undefined ? o.dryness : 0.38,
+    smear: o.smear !== undefined ? o.smear : 0.35,
+    depleteLen: o.depleteLen || 420,
+    speed: o.speed || 260,
+    kandinsky: !!o.kandinsky,
+    arc: 0, trem: 0, sn: 0, sn2: 0,
+    releasing: false, relProg: 0, relLen: 26,
+    plowAcc: 0, lastEndP: -1, alive: true
+  };
+}
+
+function stampStep(st){
+  st.trem += (rand() - 0.5) * 0.035; st.trem *= 0.95;   // tremolio della mano
+  let a0 = st.ang + st.trem;
+  // vibrato: ondulazione come modulazione d'angolo (percorso continuo).
+  // vincolo anti-gap: la rotazione per step deve muovere l'estremita' del
+  // pennello meno di 1 px -> halfWidth * wav * k^2 < 1
+  if (st.wav > 0){
+    const k = 2 * Math.PI / st.wavLen;
+    a0 += Math.cos(st.arc * k) * Math.min(st.wav * k, 0.75);
+  }
+  const dx = Math.cos(a0), dy = Math.sin(a0);
+  st.x += dx; st.y += dy; st.arc += 1; st.ang += st.curvRate;
+
+  const cx = st.x, cy = st.y;
+  const t = Math.min(st.arc / st.depleteLen, 1);
+
+  st.sn  += (rand() - 0.5) * 0.18; st.sn  *= 0.985;     // rumore esaurimento (lento)
+  st.sn2 += (rand() - 0.5) * 0.18; st.sn2 *= 0.985;     // rumore striature
+  let dep = (1 - 0.62 * Math.pow(t, 1.25)) *
+            (0.85 + 0.30 * Math.max(-1.5, Math.min(1.5, st.sn * 2.2)));
+  let rel = 1, effDry = st.dry;
+  if (st.releasing){
+    st.relProg += 1 / st.relLen;
+    if (st.relProg >= 1){ st.alive = false; endMound(st); return; }
+    rel = 0.32 + 0.68 * Math.pow(1 - st.relProg, 1.35); // coda che si assottiglia
+                                                        // (mai a punta: e' il
+                                                        // dry-brush a spezzarla)
+    dep *= 1 - 0.6 * st.relProg;                        // ...si esaurisce
+    effDry = Math.min(st.dry + 0.5 * st.relProg, 0.9);  // ...e graffia la trama
+  }
+  if (dep < 0.04) dep = 0.04;
+
+  const attack = Math.pow(Math.min(1, st.arc / 9), 0.6);
+  let grow = 1;
+  if (st.kandinsky && st.arc > 140)                     // nota tenuta -> campitura
+    grow = 1 + Math.min((st.arc - 140) / 500, 0.55);
+  const wt = st.width * attack * rel * grow;
+  const half = wt * 0.5;
+  const nx = -dy, ny = dx;
+
+  // pickup EMA del colore sotto il centro (smearing wet-on-wet)
+  const pcx = Math.round(cx), pcy = Math.round(cy);
+  if (pcx >= 0 && pcx < W && pcy >= 0 && pcy < H){
+    const q = (pcy * W + pcx) * 4, kp = 0.03;
+    for (let k = 0; k < 4; k++) st.carried[k] += (CONC[q+k] - st.carried[k]) * kp;
+  }
+  const m = st.smear * (0.25 + 0.6 * t);                // piu' sporco in coda
+  for (let k = 0; k < 4; k++) _dc[k] = st.conc[k]*(1-m) + st.carried[k]*m;
+
+  st.plowAcc *= 0.35;
+  let e0 = -1, e1 = -1, lastP = -1;
+  const strMul = 1 + 0.15 * st.sn2;
+  const invS = st.nS > 1 ? 2 / (st.nS - 1) : 0;
+  for (let j = 0; j < st.nS; j++){
+    const s = -1 + j * invS;
+    const X = cx + nx * s * half, Y = cy + ny * s * half;
+    const xi = Math.round(X), yi = Math.round(Y);
+    if (xi < 0 || xi >= W || yi < 0 || yi >= H) continue;
+    const p = yi * W + xi;
+    if (p === lastP) continue; lastP = p;
+    let edge = (1 - Math.abs(s)) * 3; if (edge > 1) edge = 1;
+    edge = Math.pow(edge, 0.65);
+    const d = dep * st.bristle[j] * st.streakB[j] * strMul;
+    let a = (d > 1.25 ? 1.25 : d) * edge;
+    if (a <= 0.012) continue;
+    // dry-brush: dove il pigmento scarseggia aggrappa solo la trama alta
+    const need = Math.min(Math.max((effDry * 1.15 - d) / Math.max(effDry, 1e-3), 0), 1);
+    let gate = (WEAVE[p] + (1 - need) - 0.82) / 0.22;
+    gate = gate < 0 ? 0 : (gate > 1 ? 1 : gate);
+    a *= (0.12 + 0.88 * gate) * st.opacity;
+    if (a <= 0.01) continue;
+    if (a > 0.88) a = 0.88;
+    const q = p * 4;                                     // compositing in spazio KM
+    CONC[q]   += (_dc[0] - CONC[q])   * a;
+    CONC[q+1] += (_dc[1] - CONC[q+1]) * a;
+    CONC[q+2] += (_dc[2] - CONC[q+2]) * a;
+    CONC[q+3] += (_dc[3] - CONC[q+3]) * a;
+    // impasto + aratura: il pennello raschia la pasta e la spinge ai bordi (T2)
+    let hAdd = a * d; if (hAdd > 1.4) hAdd = 1.4;
+    hAdd *= 0.70 * st.thickness;
+    if (a > 0.3){ const pl = HGT[p] * 0.10 * a; HGT[p] -= pl; st.plowAcc += pl; }
+    let hv = HGT[p] + hAdd; HGT[p] = hv > 5 ? 5 : hv;
+    dirtyAdd(xi, yi);
+    if (e0 < 0) e0 = p; e1 = p;
+  }
+  if (e0 >= 0){                                          // creste laterali
+    let hv = HGT[e0] + st.plowAcc * 0.35; HGT[e0] = hv > 5 ? 5 : hv;
+    hv = HGT[e1] + st.plowAcc * 0.35; HGT[e1] = hv > 5 ? 5 : hv;
+    st.lastEndP = e1;
+  }
+}
+function endMound(st){                                   // monticello di rilascio
+  const xi = Math.round(st.x), yi = Math.round(st.y);
+  if (xi < 1 || xi >= W-1 || yi < 1 || yi >= H-1) return;
+  const amt = st.plowAcc * 0.5 + 0.05 * st.thickness;
+  for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++){
+    const p = (yi+oy) * W + xi + ox;
+    const hv = HGT[p] + amt * (ox===0 && oy===0 ? 0.5 : 0.18);
+    HGT[p] = hv > 5 ? 5 : hv;
+  }
+  dirtyAdd(xi-1, yi-1); dirtyAdd(xi+1, yi+1);
+}
+
+/* pennellata sincrona a lunghezza nota (ground, schizzi, dab) */
+function strokeFull(o, planned){
+  const st = makeStroke(o);
+  const body = Math.max(6, planned * 0.72);
+  st.relLen = Math.max(4, planned * 0.28);
+  while (st.alive){
+    if (!st.releasing && st.arc >= body) st.releasing = true;
+    stampStep(st);
+    if (st.arc > planned + st.relLen + 8) break;
+  }
+}
+
+/* ============================================================================
+   4. FONDO — tela preparata: campo ocra caldo a pennellate orizzontali
+   ========================================================================= */
+const GROUND = fitConc(212, 179, 103);
+function paintGround(){
+  CONC.fill(0); HGT.fill(0);
+  for (let i = 0; i < W*H; i++){
+    const q = i * 4;
+    CONC[q] = GROUND[0]; CONC[q+1] = GROUND[1]; CONC[q+2] = GROUND[2]; CONC[q+3] = GROUND[3];
+  }
+  // in spazio KM nero e vermiglio sono potentissimi: concentrazioni minime
+  const variants = [
+    mixConc(GROUND, C_WHITE, 0.08), GROUND, GROUND,
+    mixConc(GROUND, C_BLACK, 0.008), mixConc(GROUND, C_VERM, 0.012)
+  ];
+  let y = -20;
+  while (y < H + 20){
+    let x = -300 + rand() * 220;
+    while (x < W + 50){
+      const L = 350 + rand() * 350;
+      strokeFull({
+        x, y: y + (rand()-0.5) * 12, angle: (rand()-0.5) * 0.08,
+        conc: variants[(rand()*variants.length)|0],
+        width: 40 + rand() * 30, opacity: 0.55 + rand() * 0.23,
+        thickness: 0.12 + rand() * 0.16, curvRate: (rand()-0.5) * 0.0003,
+        dryness: 0.55 + rand() * 0.23, smear: 0.20 + rand() * 0.18,
+        depleteLen: L * 1.3
+      }, L);
+      x += L * (0.65 + rand() * 0.25);
+    }
+    y += 30 + rand() * 16;
+  }
+  // velatura: ammorbidisce le striature del fondo (blur del buffer conc)
+  for (let k = 0; k < 4; k++){
+    for (let i = 0; i < W*H; i++) S1[i] = CONC[i*4 + k];
+    blurRegion(S1, W, H, 8, 2);
+    for (let i = 0; i < W*H; i++) CONC[i*4 + k] = S1[i];
+  }
+  // l'impasto del ground resta, appena accennato
+  for (let i = 0; i < W*H; i++) HGT[i] *= 0.5;
+}
+
+/* ============================================================================
+   5. MAPPING MUSICA -> PITTURA (deterministico, report Agente 2)
+   pitch class -> tinta | ottava -> luminosita' | tempo -> X | pitch -> Y
+   durata (hold) -> lunghezza live | velocity -> larghezza+impasto+opacita'
+   intervallo -> angolo | note rapide -> frusta+schizzi | tenute -> campiture
+   ========================================================================= */
+const MARGIN = 80;
+const PLAYHEAD_PX_S = 235;                   // tempo -> X
+function yFromMidi(m){                       // acuto = ALTO (flip corretto)
+  const t = Math.min(1, Math.max(0, (m - 40) / (86 - 40)));
+  return (H - 80) - t * (H - 160);
+}
+
+let clockX = MARGIN;
+let lastNoteWall = -1e9, lastNoteOnWall = -1e9, prevMidi = null;
+const activeNotes = new Map();               // id -> {strokes:[], voice}
+const fading = [];                           // pennellate in rilascio
+
+function velParams(vel){                     // vel 0..1.4
+  return {
+    width:  15 + 28 * vel,
+    thickness: 0.35 + 0.75 * Math.min(vel, 1.3),
+    opacity: 0.72 + 0.18 * Math.min(vel, 1.3) / 1.3
+  };
+}
+
+function spawnDroplets(x, y, ang, conc, vel){        // schizzi alla Pollock
+  const n = 3 + (rand() * 4) | 0;
+  const ca = Math.cos(ang), sa = Math.sin(ang);
+  for (let i = 0; i < n; i++){
+    const dist = 32 + rand() * 88 + i * 12;
+    const px = x + ca * dist + (rand()-0.5) * 26;
+    const py = y + sa * dist + (rand()-0.5) * 26;
+    const size = 1.4 + rand() * 3.2 * Math.min(vel, 1.3);
+    strokeFull({
+      x: px, y: py, angle: ang + (rand()-0.5) * 0.6,
+      conc, width: size * 2, opacity: 0.9, thickness: 1.3,
+      dryness: 0.22, smear: 0.05, depleteLen: size * 8
+    }, size * 2.6 + rand() * 9);
+  }
+}
+
+/* opts: colorConc, waviness, waveLen, curvRate, widthMul, thickMul, dryness,
+         slabs, noWhip, speedMul */
+function noteOn(id, midi, vel, opts){
+  opts = opts || {};
+  const now = performance.now();
+  // il tempo scorre: se l'orologio era in pausa riparte da qui
+  lastNoteWall = now;
+  const gap = now - lastNoteOnWall;
+  lastNoteOnWall = now;
+
+  const x = clockX, y = yFromMidi(midi);
+  const conc = opts.colorConc || noteConc(midi);
+
+  // angolo = direzione melodica (intervallo dalla nota precedente)
+  const iv = prevMidi === null ? 0 : midi - prevMidi;
+  prevMidi = midi;
+  let ang = -Math.max(-14, Math.min(14, iv)) / 14 * 0.96 + (rand()-0.5) * 0.10;
+  // intervalli grandi -> archi curvi (~1.2 rad totali su ~200 px)
+  let curvRate = opts.curvRate !== undefined ? opts.curvRate
+    : (Math.abs(iv) >= 7 ? -Math.sign(iv) * Math.min(Math.abs(iv), 14) / 14 * 0.006
+                         : (rand()-0.5) * 0.0012);
+
+  const whip = !opts.noWhip && gap < 175 && gap > 0;   // note rapide -> frusta
+  const vp = velParams(vel);
+  let width = vp.width * (opts.widthMul || 1);
+  let speed = 340 * (opts.speedMul || 1);
+  let dry = opts.dryness !== undefined ? opts.dryness : 0.36;
+  if (whip){ speed *= 1.75; width *= 0.72; dry = Math.min(dry + 0.18, 0.8); }
+
+  const base = {
+    x, y, angle: ang, curvRate, conc,
+    waviness: opts.waviness || 0, waveLen: opts.waveLen || 42,
+    width, opacity: vp.opacity, thickness: vp.thickness * (opts.thickMul || 1),
+    dryness: dry, smear: 0.38, speed,
+    depleteLen: 320 + 340 * Math.min(vel, 1.4),
+    kandinsky: !whip
+  };
+  const strokes = [];
+  const slabs = opts.slabs || 1;             // powerchord: lastre parallele
+  for (let sI = 0; sI < slabs; sI++){
+    const off = slabs === 1 ? 0 : (sI - (slabs-1)/2) * width * 0.92;
+    const o = Object.assign({}, base, {
+      y: y + off,
+      x: x + (rand()-0.5) * 4 + (slabs > 1 ? (rand()-0.5) * 22 : 0),
+      angle: base.angle + (slabs > 1 ? (rand()-0.5) * 0.07 : 0),
+      depleteLen: base.depleteLen * (0.88 + 0.24 * rand()),
+      speed: base.speed * (slabs > 1 ? 0.92 + 0.16 * rand() : 1),
+      width: width * (sI === (slabs-1)/2 ? 1 : 0.8),
+      opacity: base.opacity * (sI === (slabs-1)/2 ? 1 : 0.88)
+    });
+    strokes.push(makeStroke(o));
+  }
+  if (whip) spawnDroplets(x, y, ang, conc, vel);
+
+  const voice = audioNoteOn(midi, vel, opts.fifth);
+  activeNotes.set(id, { strokes, voice });
+  return { x, y, ang, conc };
+}
+
+function noteOff(id){
+  const n = activeNotes.get(id);
+  if (!n) return;
+  activeNotes.delete(id);
+  for (const st of n.strokes){
+    if (!st.releasing){
+      st.releasing = true;
+      st.relLen = Math.max(10, Math.min(60, st.arc * 0.3)) * (0.75 + 0.5 * rand());
+    }
+    if (st.alive) fading.push(st);
+  }
+  audioNoteOff(n.voice);
+  lastNoteWall = performance.now();
+}
+
+/* ============================================================================
+   6. AUDIO — pluck a oscillatori con envelope (l'utente sente cio' che dipinge)
+   ========================================================================= */
+let AC = null, master = null;
+function ensureAudio(){
+  if (AC) return;
+  try {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    master = AC.createGain(); master.gain.value = 0.85;
+    const comp = AC.createDynamicsCompressor();
+    master.connect(comp); comp.connect(AC.destination);
+  } catch (e) { AC = null; }
+}
+function pluck(midi, vel, when){
+  const f = 440 * Math.pow(2, (midi - 69) / 12);
+  const o1 = AC.createOscillator(); o1.type = 'sawtooth'; o1.frequency.value = f;
+  const o2 = AC.createOscillator(); o2.type = 'triangle'; o2.frequency.value = f * 2.003;
+  const g2 = AC.createGain(); g2.gain.value = 0.3;
+  const filt = AC.createBiquadFilter(); filt.type = 'lowpass'; filt.Q.value = 1.1;
+  filt.frequency.setValueAtTime(900 + 2400 * Math.min(vel, 1.4), when);
+  filt.frequency.exponentialRampToValueAtTime(420, when + 0.7);
+  const g = AC.createGain();
+  const peak = 0.16 * Math.min(vel, 1.4) + 0.02;
+  g.gain.setValueAtTime(0.0001, when);
+  g.gain.linearRampToValueAtTime(peak, when + 0.008);
+  g.gain.exponentialRampToValueAtTime(Math.max(peak * 0.28, 0.001), when + 0.55);
+  o1.connect(filt); o2.connect(g2); g2.connect(filt);
+  filt.connect(g); g.connect(master);
+  o1.start(when); o2.start(when);
+  return { o1, o2, g };
+}
+function audioNoteOn(midi, vel, fifth){
+  ensureAudio();
+  if (!AC) return null;
+  if (AC.state === 'suspended') AC.resume().catch(()=>{});
+  const t = AC.currentTime;
+  const vs = [pluck(midi, vel, t)];
+  if (fifth) vs.push(pluck(midi + 7, vel * 0.8, t));    // powerchord
+  return vs;
+}
+function audioNoteOff(vs){
+  if (!AC || !vs) return;
+  const t = AC.currentTime;
+  for (const v of vs){
+    try {
+      v.g.gain.cancelScheduledValues(t);
+      v.g.gain.setValueAtTime(Math.max(v.g.gain.value, 0.0001), t);
+      v.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+      v.o1.stop(t + 0.3); v.o2.stop(t + 0.3);
+    } catch (e) {}
+  }
+}
+
+/* ============================================================================
+   7. LOOP — requestAnimationFrame: allunga i tratti live, relight incrementale
+   ========================================================================= */
+let lastT = performance.now();
+window.__perf = { maxLightMs: 0, maxFrameMs: 0, frames: 0 };
+function tick(now){
+  const t0 = performance.now();
+  const dt = Math.min((now - lastT) / 1000, 0.05); lastT = now;
+  dirtyReset();
+
+  // playhead: scorre finche' si suona, pausa dopo 2.2 s di silenzio
+  if (activeNotes.size > 0 || now - lastNoteWall < 2200){
+    clockX += PLAYHEAD_PX_S * dt;
+    if (clockX > W - MARGIN) clockX = MARGIN;           // wrap: si riparte
+  }
+  runDemoQueue(now);
+
+  // allunga i tratti attivi (il cuore dell'esperienza)
+  const stepAll = (st) => {
+    let n = Math.max(1, Math.min(14, Math.round(st.speed * dt)));
+    while (n-- > 0 && st.alive) stampStep(st);
+  };
+  for (const nObj of activeNotes.values())
+    for (const st of nObj.strokes) if (st.alive) stepAll(st);
+  for (let i = fading.length - 1; i >= 0; i--){
+    const st = fading[i];
+    if (st.alive) stepAll(st);
+    if (!st.alive) fading.splice(i, 1);
+  }
+
+  if (dirty.x1 >= 0){
+    const tl = performance.now();
+    relightRegion(dirty.x0, dirty.y0, dirty.x1, dirty.y1);
+    const ms = performance.now() - tl;
+    if (ms > window.__perf.maxLightMs) window.__perf.maxLightMs = ms;
+  }
+  const fms = performance.now() - t0;
+  if (fms > window.__perf.maxFrameMs) window.__perf.maxFrameMs = fms;
+  window.__perf.frames++;
+  requestAnimationFrame(tick);
+}
+
+/* ============================================================================
+   8. INPUT — tastiera (pentatonica su 3 ottave) + Web MIDI opzionale
+   ========================================================================= */
+/* A C D E G — riga home = ottava media, sopra = +12, sotto = -12 */
+const KEYMAP = {
+  KeyA: 57, KeyS: 60, KeyD: 62, KeyF: 64, KeyG: 67,
+  KeyW: 69, KeyE: 72, KeyR: 74, KeyT: 76, KeyY: 79,
+  KeyZ: 45, KeyX: 48, KeyC: 50, KeyV: 52, KeyB: 55
+};
+const keyLast = {};                          // ribattuta rapida -> velocity
+window.addEventListener('keydown', (e) => {
+  if (e.repeat) return;
+  const midi = KEYMAP[e.code];
+  if (midi === undefined) return;
+  if (activeNotes.has('k' + e.code)) return;
+  ensureAudio();
+  let vel = 0.85;
+  const now = performance.now();
+  if (keyLast[e.code] && now - keyLast[e.code] < 200) vel += 0.35;
+  if (e.shiftKey) vel = 1.3;
+  keyLast[e.code] = now;
+  noteOn('k' + e.code, midi, Math.min(vel, 1.4));
+  e.preventDefault();
+});
+window.addEventListener('keyup', (e) => {
+  if (KEYMAP[e.code] !== undefined) noteOff('k' + e.code);
+});
+window.addEventListener('blur', () => {
+  for (const id of [...activeNotes.keys()]) noteOff(id);
+});
+
+/* Web MIDI: opzionale, fallback silenzioso */
+const statusEl = document.getElementById('status');
+(function initMIDI(){
+  if (!navigator.requestMIDIAccess){ statusEl.textContent = 'MIDI: non disponibile'; return; }
+  navigator.requestMIDIAccess().then((access) => {
+    const attach = () => {
+      let n = 0;
+      access.inputs.forEach((inp) => {
+        n++;
+        inp.onmidimessage = (msg) => {
+          const [stt, d1, d2] = msg.data;
+          const cmd = stt & 0xF0;
+          if (cmd === 0x90 && d2 > 0) noteOn('m' + d1, d1, d2 / 127 * 1.4);
+          else if (cmd === 0x80 || (cmd === 0x90 && d2 === 0)) noteOff('m' + d1);
+        };
+      });
+      statusEl.textContent = n ? ('MIDI: ' + n + ' ingresso/i collegati') : 'MIDI: nessun dispositivo';
+    };
+    attach();
+    access.onstatechange = attach;
+  }).catch(() => { statusEl.textContent = 'MIDI: non disponibile'; });
+})();
+
+/* ============================================================================
+   9. DEMO — Johnny B. Goode (12 note da parse_riff v7, tuning[6-string] FIX)
+   MIDI ricavati con tuning=[40,45,50,55,59,64], midi=tuning[6-string]+fret,
+   poi agganciati alla pitch class dichiarata (i dati fret/corda di 4 note
+   sono incoerenti nel sorgente v7: si fa fede al nome della nota).
+   ========================================================================= */
+const RIFF = [
+  { pc:'A', midi:45, dur:0.50, vel:0.95, tech:'staccato' },
+  { pc:'C', midi:48, dur:0.50, vel:1.20, tech:'legato' },
+  { pc:'D', midi:50, dur:0.25, vel:1.20, tech:'slide' },
+  { pc:'A', midi:57, dur:0.50, vel:0.95, tech:'hammer_on' },
+  { pc:'C', midi:48, dur:0.25, vel:1.20, tech:'bend' },
+  { pc:'D', midi:62, dur:0.75, vel:1.20, tech:'vibrato' },
+  { pc:'E', midi:72, dur:0.50, vel:1.20, tech:'harmonic_natural' },
+  { pc:'G', midi:67, dur:0.50, vel:0.75, tech:'legato' },
+  { pc:'A', midi:69, dur:1.00, vel:1.20, tech:'powerchord' },
+  { pc:'C', midi:48, dur:0.25, vel:0.95, tech:'tapping' },
+  { pc:'D', midi:50, dur:0.50, vel:1.20, tech:'dive' },
+  { pc:'G', midi:67, dur:0.25, vel:0.55, tech:'harmonic_artificial' }
+];
+function techOpts(tech, midi){
+  switch (tech){
+    case 'staccato':  return { dryness: 0.42, widthMul: 1.2, thickMul: 1.05 };
+    case 'legato':    return { dryness: 0.34, noWhip: true };
+    case 'slide':     return { curvRate: 0, dryness: 0.5, widthMul: 0.85, speedMul: 1.25 };
+    case 'hammer_on': return { widthMul: 0.9 };
+    case 'bend':      return { curvRate: -0.006, thickMul: 1.1, noWhip: true };
+    case 'vibrato':   return { waviness: 10, waveLen: 95, noWhip: true };
+    case 'harmonic_natural':
+      return { colorConc: mixConc(C_WHITE, C_OCHRE, 0.06), widthMul: 0.85,
+               dryness: 0.42, noWhip: true };
+    case 'powerchord':return { slabs: 3, thickMul: 1.25, widthMul: 1.1,
+                               fifth: true, dryness: 0.22, noWhip: true,
+                               colorConc: mixConc(noteConc(midi), noteConc(midi+7), 0.16) };
+    case 'tapping':   return { widthMul: 0.7, speedMul: 1.4 };
+    case 'dive':      return { curvRate: 0.0055, dryness: 0.46, noWhip: true };
+    case 'harmonic_artificial':
+      return { colorConc: mixConc(C_WHITE, C_GOLD, 0.15), widthMul: 0.6,
+               dryness: 0.5, noWhip: true };
+    default: return {};
+  }
+}
+let demoQ = [], demoRunning = false;
+window.__demoDone = false;
+function runDemo(){
+  if (demoRunning) return;
+  demoRunning = true; window.__demoDone = false;
+  document.getElementById('btnDemo').disabled = true;
+  ensureAudio();
+  prevMidi = null;
+  clockX = MARGIN + 30;
+  const BEAT = 640;                          // ms per beat
+  const t0 = performance.now() + 200;
+  let t = 0;
+  demoQ = [];
+  RIFF.forEach((n, i) => {
+    const on = t0 + t * BEAT;
+    const holdF = n.tech === 'staccato' ? 0.45 : 0.82;
+    const off = on + n.dur * BEAT * holdF;
+    demoQ.push({ t: on, type: 'on', id: 'demo' + i, midi: n.midi,
+                 vel: n.vel, opts: techOpts(n.tech, n.midi), tech: n.tech });
+    demoQ.push({ t: off, type: 'off', id: 'demo' + i });
+    t += n.dur;
+  });
+  demoQ.push({ t: t0 + t * BEAT + 900, type: 'end' });
+  demoQ.sort((a, b) => a.t - b.t);
+}
+window.runDemo = runDemo;
+function runDemoQueue(now){
+  while (demoQ.length && now >= demoQ[0].t){
+    const ev = demoQ.shift();
+    if (ev.type === 'on'){
+      const r = noteOn(ev.id, ev.midi, ev.vel, ev.opts);
+      // ornamenti tecnici: dab extra intorno all'attacco
+      if (ev.tech === 'hammer_on'){
+        for (const adeg of [60, 180, 300]){
+          const a = adeg * Math.PI / 180;
+          strokeFull({ x: r.x + 10*Math.cos(a), y: r.y + 10*Math.sin(a), angle: a,
+            conc: r.conc, width: 9, opacity: 0.88, thickness: 0.8,
+            dryness: 0.36, smear: 0.06, depleteLen: 60 }, 26);
+        }
+      } else if (ev.tech === 'tapping'){
+        for (const adeg of [45, 225]){
+          const a = adeg * Math.PI / 180;
+          strokeFull({ x: r.x + 7*Math.cos(a), y: r.y + 7*Math.sin(a), angle: a,
+            conc: r.conc, width: 7, opacity: 0.88, thickness: 0.85,
+            dryness: 0.4, smear: 0.06, depleteLen: 55 }, 24);
+        }
+      } else if (ev.tech === 'harmonic_artificial'){
+        for (const adeg of [0, 90, 180, 270]){
+          const a = adeg * Math.PI / 180;
+          strokeFull({ x: r.x + 8*Math.cos(a), y: r.y + 8*Math.sin(a), angle: a,
+            conc: r.conc, width: 6, opacity: 0.84, thickness: 0.7,
+            dryness: 0.48, smear: 0.06, depleteLen: 45 }, 20);
+        }
+      }
+    } else if (ev.type === 'off'){
+      noteOff(ev.id);
+    } else if (ev.type === 'end'){
+      demoRunning = false; window.__demoDone = true;
+      document.getElementById('btnDemo').disabled = false;
+    }
+  }
+}
+
+/* ============================================================================
+   10. UI — pulsanti, legenda, init
+   ========================================================================= */
+document.getElementById('btnDemo').addEventListener('click', runDemo);
+document.getElementById('btnSave').addEventListener('click', () => {
+  const a = document.createElement('a');
+  a.download = 'guitarzorn_live.png';
+  a.href = cvEl.toDataURL('image/png');
+  a.click();
+});
+const veil = document.getElementById('veil');
+function newCanvas(seedBump){
+  veil.classList.add('on');
+  document.getElementById('btnNew').disabled = true;
+  setTimeout(() => {
+    if (seedBump) _seed += 1;
+    rand = mulberry32(_seed);
+    for (const id of [...activeNotes.keys()]) noteOff(id);
+    fading.length = 0; demoQ = []; demoRunning = false; window.__demoDone = false;
+    document.getElementById('btnDemo').disabled = false;
+    prevMidi = null; clockX = MARGIN;
+    paintGround();
+    relightRegion(0, 0, W, H);
+    veil.classList.remove('on');
+    document.getElementById('btnNew').disabled = false;
+  }, 30);
+}
+document.getElementById('btnNew').addEventListener('click', () => newCanvas(true));
+
+/* legenda tasti -> note -> colori */
+(function buildLegend(){
+  const leg = document.getElementById('legend');
+  const rows = [
+    { pc: 9, name: 'A', keys: 'Z A W' }, { pc: 0, name: 'C', keys: 'X S E' },
+    { pc: 2, name: 'D', keys: 'C D R' }, { pc: 4, name: 'E', keys: 'V F T' },
+    { pc: 7, name: 'G', keys: 'B G Y' }
+  ];
+  for (const r of rows){
+    const c = PC_CONC[r.pc];
+    concToRGB(c[0], c[1], c[2], c[3], _rgbTmp);
+    const css = 'rgb(' + Math.round(_rgbTmp[0]*255) + ',' +
+                Math.round(_rgbTmp[1]*255) + ',' + Math.round(_rgbTmp[2]*255) + ')';
+    const el = document.createElement('div');
+    el.className = 'chip';
+    el.innerHTML = '<span class="dot" style="background:' + css + '"></span>' +
+                   '<b>' + r.name + '</b><span class="keys">' + r.keys + '</span>';
+    leg.appendChild(el);
+  }
+})();
+
+/* init */
+buildWeave();
+newCanvas(false);
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
