@@ -70,7 +70,9 @@
   <div class="btns">
     <button id="btnNew">Nuova tela</button>
     <button id="btnSave">Salva PNG</button>
+    <button id="btnLoop" title="Carica un loop registrato (JSON) e dipingilo">Carica loop</button>
     <button id="btnDemo" class="primary">Demo: Johnny B. Goode</button>
+    <input type="file" id="loopFile" accept=".json,application/json" style="display:none">
   </div>
 </header>
 
@@ -874,9 +876,85 @@ function runDemoQueue(now){
 }
 
 /* ============================================================================
+   9b. INTEGRAZIONE ESTERNA — Guitar Improv Lab / looper
+   Tre canali equivalenti, stesso protocollo:
+     1) window.postMessage  (iframe o window.open dalla pagina del looper)
+     2) BroadcastChannel('guitarzorn')  (tab separate, stessa origin)
+     3) API JS diretta: window.guitarzorn.{noteOn,noteOff,paintLoop,clear}
+   Messaggi:
+     { type:'noteOn',  midi, velocity?, technique? }   velocity: 0..127 o 0..1.4
+     { type:'noteOff', midi }
+     { type:'loop', bpm?, events:[{ midi, start, duration, velocity?, technique? }] }
+         start/duration in beat; il loop viene suonato E dipinto
+     { type:'clear', newSeed? }
+   ========================================================================= */
+function normVel(v){
+  if (v == null) return 1.0;
+  if (typeof v === 'string')
+    return ({pp:0.4, p:0.55, mp:0.75, mf:0.95, f:1.2, ff:1.4})[v] || 1.0;
+  return v > 2 ? Math.min(v, 127) / 127 * 1.4 : v;   // MIDI 0-127 o gia' normalizzata
+}
+function extNoteOn(midi, vel, tech){
+  ensureAudio();
+  noteOn('ext' + midi, midi, normVel(vel), techOpts(tech || '', midi));
+}
+function extNoteOff(midi){ noteOff('ext' + midi); }
+function scheduleEvents(events, bpm){
+  ensureAudio();
+  const BEAT = 60000 / (bpm || 94);
+  const t0 = performance.now() + 150;
+  let endT = t0;
+  events.forEach((e, i) => {
+    if (e.midi == null) return;
+    const on  = t0 + (e.start || 0) * BEAT;
+    const off = on + Math.max(0.08, e.duration || 0.5) * BEAT * 0.85;
+    endT = Math.max(endT, off);
+    demoQ.push({ t: on, type: 'on', id: 'loop' + i, midi: e.midi,
+                 vel: normVel(e.velocity), opts: techOpts(e.technique || '', e.midi),
+                 tech: e.technique || '' });
+    demoQ.push({ t: off, type: 'off', id: 'loop' + i });
+  });
+  demoQ.push({ t: endT + 900, type: 'end' });
+  demoQ.sort((a, b) => a.t - b.t);
+}
+function handleExtMessage(d){
+  if (!d || typeof d !== 'object') return;
+  switch (d.type){
+    case 'noteOn':  if (d.midi != null) extNoteOn(d.midi, d.velocity, d.technique); break;
+    case 'noteOff': if (d.midi != null) extNoteOff(d.midi); break;
+    case 'loop':    if (Array.isArray(d.events)) scheduleEvents(d.events, d.bpm); break;
+    case 'clear':   newCanvas(!!d.newSeed); break;
+  }
+}
+window.addEventListener('message', ev => handleExtMessage(ev.data));
+try {
+  const bc = new BroadcastChannel('guitarzorn');
+  bc.onmessage = ev => handleExtMessage(ev.data);
+} catch (e) { /* browser senza BroadcastChannel: postMessage resta attivo */ }
+window.guitarzorn = {
+  noteOn: extNoteOn, noteOff: extNoteOff,
+  paintLoop: scheduleEvents, clear: () => newCanvas(false)
+};
+
+/* ============================================================================
    10. UI — pulsanti, legenda, init
    ========================================================================= */
 document.getElementById('btnDemo').addEventListener('click', runDemo);
+document.getElementById('btnLoop').addEventListener('click',
+  () => document.getElementById('loopFile').click());
+document.getElementById('loopFile').addEventListener('change', ev => {
+  const f = ev.target.files[0];
+  if (!f) return;
+  f.text().then(txt => {
+    try {
+      const d = JSON.parse(txt);
+      const events = Array.isArray(d) ? d : d.events;
+      if (Array.isArray(events)) scheduleEvents(events, d.bpm);
+      else alert('JSON non valido: atteso {bpm, events:[...]} o un array di eventi.');
+    } catch (err) { alert('JSON non valido: ' + err.message); }
+    ev.target.value = '';
+  });
+});
 document.getElementById('btnSave').addEventListener('click', () => {
   const a = document.createElement('a');
   a.download = 'guitarzorn_live.png';
