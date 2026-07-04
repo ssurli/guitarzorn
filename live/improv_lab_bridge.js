@@ -34,23 +34,42 @@
     return window.LOOPER || null;
   }
 
-  /* ── pitch detection (fallback identico all'algoritmo del tuner) ─────────── */
+  /* ── pitch detection: autocorrelazione con "primo picco" anti-ottava ──────
+     L'autocorrelazione classica prende il picco MASSIMO, che spesso cade a un
+     multiplo del vero periodo → nota un'ottava (o più) troppo bassa. Qui, dopo
+     aver trovato il massimo globale, si prende il PRIMO picco (periodo più
+     corto) che sia almeno l'85% del massimo: è la fondamentale reale. Con
+     interpolazione parabolica per la precisione sub-campione. */
   function localAutocorrelate(buf, sampleRate) {
     const n = buf.length;
     let rms = 0;
     for (let i = 0; i < n; i++) rms += buf[i] * buf[i];
-    if (Math.sqrt(rms / n) < 0.015) return -1;
-    const minLag = Math.floor(sampleRate / 1300);
-    const maxLag = Math.min(n - 2, Math.ceil(sampleRate / 75));
-    let maxCorr = -1, bestLag = -1;
+    if (Math.sqrt(rms / n) < 0.02) return -1;
+    const minLag = Math.max(2, Math.floor(sampleRate / 1300));   // fino a ~1300 Hz
+    const maxLag = Math.min(n - 2, Math.ceil(sampleRate / 70));   // giù a ~70 Hz
+    const corr = new Float32Array(maxLag + 2);
+    let gmax = 0;
     for (let lag = minLag; lag <= maxLag; lag++) {
       let c = 0;
       const lim = n - lag;
       for (let j = 0; j < lim; j++) c += buf[j] * buf[j + lag];
-      if (c > maxCorr) { maxCorr = c; bestLag = lag; }
+      corr[lag] = c;
+      if (c > gmax) gmax = c;
     }
-    if (bestLag < 1) return -1;
-    return sampleRate / bestLag;
+    if (gmax <= 0) return -1;
+    const thr = 0.85 * gmax;                       // soglia "quasi-massimo"
+    let bestLag = -1;
+    for (let lag = minLag + 1; lag < maxLag; lag++) {
+      if (corr[lag] >= thr && corr[lag] > corr[lag - 1] && corr[lag] >= corr[lag + 1]) {
+        bestLag = lag; break;                      // primo picco forte = fondamentale
+      }
+    }
+    if (bestLag < 0) return -1;
+    // interpolazione parabolica attorno al picco
+    const a = corr[bestLag - 1], b = corr[bestLag], c = corr[bestLag + 1];
+    const denom = a - 2 * b + c;
+    const shift = denom !== 0 ? 0.5 * (a - c) / denom : 0;
+    return sampleRate / (bestLag + shift);
   }
 
   /* ── trascrizione: AudioBuffer → eventi nota ─────────────────────────────── */
@@ -99,21 +118,43 @@
         frames[i].midi = a;
     }
 
-    // 2. raggruppa le finestre in note (tollera ±1 semitono, buchi brevi)
+    // 2. raggruppa le finestre in note. La nota corre finche' il pitch resta
+    //    entro ±1.5 semitoni dalla MEDIANA corrente dei suoi frame (robusto a
+    //    bend/vibrato). Ogni nota raccoglie tutti i suoi midi: la tonalita'
+    //    finale sara' la MODA (non l'attacco, che e' rumoroso).
     const events = [];
     let cur = null;
-    const flush = () => { if (cur) { events.push(cur); cur = null; } };
+    const flush = () => {
+      if (!cur) return;
+      // moda dei midi della nota
+      const counts = {};
+      let mode = cur.midis[0], best = 0;
+      for (const m of cur.midis) {
+        counts[m] = (counts[m] || 0) + 1;
+        if (counts[m] > best) { best = counts[m]; mode = m; }
+      }
+      cur.midi = mode;
+      // ampiezza dell'escursione di pitch → indizio di vibrato/bend
+      let lo = 999, hi = 0;
+      for (const m of cur.midis) { if (m < lo) lo = m; if (m > hi) hi = m; }
+      cur.span = hi - lo;
+      events.push(cur);
+      cur = null;
+    };
+    const median = arr => {
+      const s = arr.slice().sort((x, y) => x - y);
+      return s[s.length >> 1];
+    };
     for (const fr of frames) {
       const on = fr.midi > 0;
-      if (cur && on && Math.abs(fr.midi - cur.midi) <= 1) {
+      if (cur && on && Math.abs(fr.midi - median(cur.midis)) <= 1.5) {
         cur.end = fr.t + hopSec;
         cur.peak = Math.max(cur.peak, fr.rms);
-        cur.bendy += (fr.midi !== cur.midi) ? 1 : 0;
+        cur.midis.push(fr.midi);
         cur.sil = 0;
       } else if (on) {
         flush();
-        cur = { midi: fr.midi, t0: fr.t, end: fr.t + hopSec,
-                peak: fr.rms, bendy: 0, sil: 0 };
+        cur = { t0: fr.t, end: fr.t + hopSec, peak: fr.rms, midis: [fr.midi], sil: 0 };
       } else if (cur && ++cur.sil > 4) {              // tollera fino a ~4 buchi
         flush();
       }
@@ -128,7 +169,7 @@
         start: +e.t0.toFixed(3),                       // secondi (bpm=60 → beat)
         duration: +Math.max(0.12, e.end - e.t0).toFixed(3),
         velocity: +Math.min(1.4, 0.45 + e.peak * 3).toFixed(2),
-        technique: e.bendy > 4 ? 'vibrato' : undefined
+        technique: e.span >= 2 ? 'vibrato' : undefined
       }));
 
     // diagnostica: se la trascrizione fallisce, questi numeri dicono perche'
