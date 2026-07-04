@@ -1027,8 +1027,30 @@ function extNoteOn(midi, vel, tech){
   noteOn('ext' + midi, midi, normVel(vel), techOpts(tech || '', midi));
 }
 function extNoteOff(midi){ noteOff('ext' + midi); }
+// seed deterministico dagli eventi: stessa sequenza di note → stesso quadro
+// (DIPINGI e JSON ricaricato coincidono; melodie diverse → "mani" diverse)
+function loopSeed(events){
+  let h = 2166136261 >>> 0;
+  for (const e of events){
+    h = Math.imul(h ^ ((e.midi | 0) + 128), 16777619);
+    h = Math.imul(h ^ (Math.round((e.start || 0) * 8) & 0xffff), 16777619);
+  }
+  return (h >>> 0) || 1;
+}
+// riparte da una tela pulita e deterministica prima di dipingere un loop
+function resetForLoop(seed){
+  _seed = seed;
+  rand = mulberry32(_seed);
+  for (const id of [...activeNotes.keys()]) noteOff(id);
+  fading.length = 0; demoQ = []; demoRunning = false; window.__demoDone = false;
+  prevMidi = null; walkReset();
+  paintGround();
+  relightRegion(0, 0, W, H);
+}
+
 function scheduleEvents(events, bpm, mute){
   if (!mute) ensureAudio();       // muto: nessun synth (il looper suona gia')
+  resetForLoop(loopSeed(events)); // tela pulita e riproducibile per questo loop
   const BEAT = 60000 / (bpm || 94);
   const t0 = performance.now() + 150;
   let endT = t0;
