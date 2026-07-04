@@ -100,20 +100,84 @@
       }));
   }
 
-  /* ── invio a guitarzorn ──────────────────────────────────────────────────── */
-  let zornWin = null;
+  /* ── pannello inline: guitarzorn incastrato sotto il looper ───────────────── */
+  let panel = null, frame = null, frameReady = false, pending = null, pinger = 0;
+
+  function buildPanel() {
+    if (panel) return;
+    panel = document.createElement('div');
+    panel.id = 'guitarzorn-panel';
+    panel.style.cssText =
+      'margin:18px 0 6px;border:1px solid rgba(255,255,255,.14);border-radius:10px;' +
+      'overflow:hidden;background:#141414;display:none;box-shadow:0 8px 30px rgba(0,0,0,.4)';
+    const bar = document.createElement('div');
+    bar.style.cssText =
+      'display:flex;align-items:center;justify-content:space-between;gap:10px;' +
+      'padding:8px 12px;font:600 12px/1.2 system-ui,sans-serif;color:#e5c07b;' +
+      'letter-spacing:.08em;background:#1c1712;border-bottom:1px solid rgba(255,255,255,.08)';
+    bar.innerHTML = '<span>🎨 GUITARZORN — il tuo giro dipinto a olio</span>';
+    const acts = document.createElement('div');
+    acts.style.cssText = 'display:flex;gap:8px';
+    const mkA = (txt, fn) => {
+      const b = document.createElement('button');
+      b.textContent = txt;
+      b.style.cssText =
+        'background:#2a2018;color:#e5e5e5;border:1px solid #3a3025;border-radius:6px;' +
+        'padding:4px 10px;font:600 11px system-ui;cursor:pointer';
+      b.addEventListener('click', fn);
+      return b;
+    };
+    const openBtn = mkA('↗ scheda', () => window.open(ZORN_URL, 'guitarzorn'));
+    const closeBtn = mkA('✕ chiudi', () => { panel.style.display = 'none'; });
+    acts.appendChild(openBtn); acts.appendChild(closeBtn);
+    bar.appendChild(acts);
+    frame = document.createElement('iframe');
+    frame.src = ZORN_URL;
+    frame.title = 'guitarzorn';
+    frame.style.cssText = 'display:block;width:100%;height:min(70vh,760px);border:0;background:#111';
+    frame.allow = 'autoplay';
+    frame.addEventListener('load', () => { frameReady = false; startPing(); });
+    panel.appendChild(bar);
+    panel.appendChild(frame);
+    // il pannello vive subito sotto il deck del looper
+    const deck = document.querySelector('.looper-deck') ||
+                 document.querySelector('.looper-controls');
+    if (deck && deck.parentNode) deck.parentNode.insertBefore(panel, deck.nextSibling);
+    else document.body.appendChild(panel);
+  }
+
+  // handshake: pinga finché guitarzorn non risponde 'ready', poi invia il loop
+  function startPing() {
+    clearInterval(pinger);
+    let tries = 0;
+    pinger = setInterval(() => {
+      if (frameReady || ++tries > 40) { clearInterval(pinger); return; }
+      try { frame.contentWindow.postMessage({ type: 'guitarzorn:ping' }, '*'); } catch (e) {}
+    }, 250);
+  }
+
+  window.addEventListener('message', ev => {
+    const d = ev.data;
+    if (d && d.type === 'guitarzorn:ready') {
+      frameReady = true;
+      clearInterval(pinger);
+      if (pending) { postToFrame(pending); pending = null; }
+    }
+  });
+
+  function postToFrame(msg) {
+    try { frame.contentWindow.postMessage(msg, '*'); } catch (e) {}
+    try { new BroadcastChannel('guitarzorn').postMessage(msg); } catch (e) {}
+  }
+
   function sendToZorn(events) {
     const msg = { type: 'loop', bpm: 60, events };
-    let sent = false;
-    try { new BroadcastChannel('guitarzorn').postMessage(msg); sent = true; } catch (e) {}
-    if (!zornWin || zornWin.closed) {
-      zornWin = window.open(ZORN_URL, 'guitarzorn');
-      // la tela deve prepararsi prima di ricevere il loop
-      setTimeout(() => { try { zornWin.postMessage(msg, '*'); } catch (e) {} }, 2600);
-    } else {
-      try { zornWin.postMessage(msg, '*'); zornWin.focus(); } catch (e) {}
-    }
-    return sent;
+    buildPanel();
+    panel.style.display = 'block';
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (frameReady) postToFrame(msg);      // tela già pronta → dipingi subito
+    else { pending = msg; startPing(); }   // altrimenti attendi l'handshake
+    return true;
   }
 
   function paintLoop() {

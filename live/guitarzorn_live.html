@@ -1044,19 +1044,33 @@ function scheduleEvents(events, bpm){
   demoQ.push({ t: endT + 900, type: 'end' });
   demoQ.sort((a, b) => a.t - b.t);
 }
-function handleExtMessage(d){
+let extReady = false;                    // la tela ha finito di prepararsi
+let extBC = null;
+function announceReady(){
+  const msg = { type: 'guitarzorn:ready' };
+  try { if (window.parent && window.parent !== window) window.parent.postMessage(msg, '*'); } catch (e) {}
+  try { if (extBC) extBC.postMessage(msg); } catch (e) {}
+}
+function handleExtMessage(d, src){
   if (!d || typeof d !== 'object') return;
   switch (d.type){
+    // handshake: il bridge chiede se la tela è pronta → rispondi
+    case 'guitarzorn:ping':
+      if (extReady){
+        try { if (src) src.postMessage({ type: 'guitarzorn:ready' }, '*'); } catch (e) {}
+        announceReady();
+      }
+      break;
     case 'noteOn':  if (d.midi != null) extNoteOn(d.midi, d.velocity, d.technique); break;
     case 'noteOff': if (d.midi != null) extNoteOff(d.midi); break;
     case 'loop':    if (Array.isArray(d.events)) scheduleEvents(d.events, d.bpm); break;
     case 'clear':   newCanvas(!!d.newSeed); break;
   }
 }
-window.addEventListener('message', ev => handleExtMessage(ev.data));
+window.addEventListener('message', ev => handleExtMessage(ev.data, ev.source));
 try {
-  const bc = new BroadcastChannel('guitarzorn');
-  bc.onmessage = ev => handleExtMessage(ev.data);
+  extBC = new BroadcastChannel('guitarzorn');
+  extBC.onmessage = ev => handleExtMessage(ev.data, null);
 } catch (e) { /* browser senza BroadcastChannel: postMessage resta attivo */ }
 window.guitarzorn = {
   noteOn: extNoteOn, noteOff: extNoteOff,
@@ -1103,6 +1117,8 @@ function newCanvas(seedBump){
     relightRegion(0, 0, W, H);
     veil.classList.remove('on');
     document.getElementById('btnNew').disabled = false;
+    extReady = true;                 // tela pronta: rispondi all'handshake del bridge
+    announceReady();
   }, 30);
 }
 document.getElementById('btnNew').addEventListener('click', () => newCanvas(true));
