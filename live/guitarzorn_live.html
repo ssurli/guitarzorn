@@ -659,8 +659,9 @@ function noteOn(id, midi, vel, opts){
   }
   if (whip) spawnDroplets(x, y, ang, conc, vel);
 
-  const voice = audioNoteOn(midi, vel, opts.fifth);
-  if (opts.glideTo != null)
+  // muto: dipinge senza synth (usato quando il loop del looper suona gia')
+  const voice = opts.mute ? null : audioNoteOn(midi, vel, opts.fifth);
+  if (voice && opts.glideTo != null)
     audioGlide(voice, opts.glideTo, opts.glideDelay || 0.02, opts.glideTime || 0.12);
   activeNotes.set(id, { strokes, voice,
                         primary: !opts.secondary,
@@ -1026,8 +1027,8 @@ function extNoteOn(midi, vel, tech){
   noteOn('ext' + midi, midi, normVel(vel), techOpts(tech || '', midi));
 }
 function extNoteOff(midi){ noteOff('ext' + midi); }
-function scheduleEvents(events, bpm){
-  ensureAudio();
+function scheduleEvents(events, bpm, mute){
+  if (!mute) ensureAudio();       // muto: nessun synth (il looper suona gia')
   const BEAT = 60000 / (bpm || 94);
   const t0 = performance.now() + 150;
   let endT = t0;
@@ -1036,9 +1037,10 @@ function scheduleEvents(events, bpm){
     const on  = t0 + (e.start || 0) * BEAT;
     const off = on + Math.max(0.08, e.duration || 0.5) * BEAT * 0.85;
     endT = Math.max(endT, off);
+    const opts = techOpts(e.technique || '', e.midi);
+    opts.mute = !!mute;
     demoQ.push({ t: on, type: 'on', id: 'loop' + i, midi: e.midi,
-                 vel: normVel(e.velocity), opts: techOpts(e.technique || '', e.midi),
-                 tech: e.technique || '' });
+                 vel: normVel(e.velocity), opts, tech: e.technique || '' });
     demoQ.push({ t: off, type: 'off', id: 'loop' + i });
   });
   demoQ.push({ t: endT + 900, type: 'end' });
@@ -1063,7 +1065,7 @@ function handleExtMessage(d, src){
       break;
     case 'noteOn':  if (d.midi != null) extNoteOn(d.midi, d.velocity, d.technique); break;
     case 'noteOff': if (d.midi != null) extNoteOff(d.midi); break;
-    case 'loop':    if (Array.isArray(d.events)) scheduleEvents(d.events, d.bpm); break;
+    case 'loop':    if (Array.isArray(d.events)) scheduleEvents(d.events, d.bpm, d.mute); break;
     case 'clear':   newCanvas(!!d.newSeed); break;
   }
 }

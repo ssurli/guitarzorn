@@ -250,7 +250,9 @@
   }
 
   function sendToZorn(events) {
-    const msg = { type: 'loop', bpm: 60, events };
+    // mute: il looper sta gia' suonando la tua chitarra vera → guitarzorn
+    // dipinge in silenzio, senza sovrapporre il proprio synth
+    const msg = { type: 'loop', bpm: 60, events, mute: true };
     buildPanel();
     panel.style.display = 'block';
     panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
