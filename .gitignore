@@ -1,2 +1,11 @@
 __pycache__/
 *.pyc
+
+# file estranei all'app (PKI/Java/video) — non ripubblicare su Pages
+*.mp4
+*.dll
+*.DLL
+cacerts
+cacerts.zip
+usercerts
+*.properties
