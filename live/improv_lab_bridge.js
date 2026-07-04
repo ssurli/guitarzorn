@@ -55,27 +55,51 @@
 
   /* ── trascrizione: AudioBuffer → eventi nota ─────────────────────────────── */
   function transcribe(buffer) {
-    const ac = (typeof window.autocorrelate === 'function')
-      ? window.autocorrelate : localAutocorrelate;
     const sr = buffer.sampleRate;
-    const data = buffer.getChannelData(0);
+    const raw = buffer.getChannelData(0);
+
+    // NORMALIZZAZIONE: le registrazioni da microfono hanno livelli molto
+    // variabili. Scalo l'intero segnale al ~95% del fondo scala rispetto al
+    // suo picco, cosi' il rilevamento del pitch e' indipendente dal volume di
+    // registrazione (il silenzio resta proporzionalmente basso).
+    let peak = 0;
+    for (let i = 0; i < raw.length; i++) { const a = Math.abs(raw[i]); if (a > peak) peak = a; }
+    const gain = peak > 1e-4 ? 0.95 / peak : 1;
+    const data = new Float32Array(raw.length);
+    for (let i = 0; i < raw.length; i++) data[i] = raw[i] * gain;
+
+    // uso una copia locale di autocorrelate: la sua soglia RMS interna e' nota
+    // e lavoro su segnale normalizzato (evito dipendenze dai gate del tuner)
+    const ac = localAutocorrelate;
     const WIN = 2048, HOP = 512;
     const hopSec = HOP / sr;
 
-    // 1. analisi per finestra: pitch + energia
+    // 1. analisi per finestra: pitch + energia (su segnale normalizzato)
     const frames = [];
     const seg = new Float32Array(WIN);
+    let voiced = 0;
     for (let i = 0; i + WIN <= data.length; i += HOP) {
       seg.set(data.subarray(i, i + WIN));
       let e = 0;
       for (let j = 0; j < WIN; j++) e += seg[j] * seg[j];
       const rms = Math.sqrt(e / WIN);
-      const f = rms > 0.012 ? ac(seg, sr) : -1;
+      const f = rms > 0.03 ? ac(seg, sr) : -1;         // gate su segnale normalizzato
       const midi = f > 0 ? Math.round(69 + 12 * Math.log2(f / 440)) : -1;
-      frames.push({ t: i / sr, midi: (midi >= 36 && midi <= 88) ? midi : -1, rms });
+      const ok = (midi >= 36 && midi <= 88);
+      if (ok) voiced++;
+      frames.push({ t: i / sr, midi: ok ? midi : -1, rms });
     }
 
-    // 2. raggruppa le finestre in note (tollera ±1 semitono per vibrato/bend)
+    // 1b. correzione errori d'ottava: se un frame salta di ~12 semitoni
+    // rispetto ai vicini, riportalo all'ottava dominante (glitch tipico
+    // dell'autocorrelazione sulla chitarra)
+    for (let i = 1; i < frames.length - 1; i++) {
+      const a = frames[i - 1].midi, b = frames[i].midi, c = frames[i + 1].midi;
+      if (a > 0 && c > 0 && b > 0 && Math.abs(a - c) <= 1 && Math.abs(b - a) >= 11)
+        frames[i].midi = a;
+    }
+
+    // 2. raggruppa le finestre in note (tollera ±1 semitono, buchi brevi)
     const events = [];
     let cur = null;
     const flush = () => { if (cur) { events.push(cur); cur = null; } };
@@ -90,22 +114,28 @@
         flush();
         cur = { midi: fr.midi, t0: fr.t, end: fr.t + hopSec,
                 peak: fr.rms, bendy: 0, sil: 0 };
-      } else if (cur && ++cur.sil > 3) {
+      } else if (cur && ++cur.sil > 4) {              // tollera fino a ~4 buchi
         flush();
       }
     }
     flush();
 
     // 3. eventi finali: filtra i glitch corti, velocity dall'energia di picco
-    return events
-      .filter(e => e.end - e.t0 >= 0.07)
+    const out = events
+      .filter(e => e.end - e.t0 >= 0.06)
       .map(e => ({
         midi: e.midi,
-        start: +e.t0.toFixed(3),                     // secondi (bpm=60 → beat)
+        start: +e.t0.toFixed(3),                       // secondi (bpm=60 → beat)
         duration: +Math.max(0.12, e.end - e.t0).toFixed(3),
-        velocity: +Math.min(1.4, 0.45 + e.peak * 6).toFixed(2),
+        velocity: +Math.min(1.4, 0.45 + e.peak * 3).toFixed(2),
         technique: e.bendy > 4 ? 'vibrato' : undefined
       }));
+
+    // diagnostica: se la trascrizione fallisce, questi numeri dicono perche'
+    console.log('[guitarzorn] trascrizione: picco=' + peak.toFixed(4) +
+      ' gain=' + gain.toFixed(1) + ' frame=' + frames.length +
+      ' con-pitch=' + voiced + ' note=' + out.length);
+    return out;
   }
 
   /* ── pannello inline: guitarzorn incastrato sotto il looper ───────────────── */
@@ -196,7 +226,10 @@
     }
     const events = transcribe(L.buffer);
     if (!events.length) {
-      alert('Nessuna nota riconosciuta nel loop — riprova con un giro più pulito.');
+      alert('Nessuna nota riconosciuta nel loop.\n\nSuggerimenti:\n' +
+            '• suona note singole e distinte (non accordi fitti)\n' +
+            '• assicurati che il volume del loop sia udibile\n' +
+            '• apri la Console (F12) per i dettagli della trascrizione');
       return;
     }
     sendToZorn(events);
