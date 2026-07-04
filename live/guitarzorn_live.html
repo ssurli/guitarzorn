@@ -507,18 +507,51 @@ function paintGround(){
 
 /* ============================================================================
    5. MAPPING MUSICA -> PITTURA (deterministico, report Agente 2)
-   pitch class -> tinta | ottava -> luminosita' | tempo -> X | pitch -> Y
+   pitch class -> tinta | ottava -> luminosita' | melodia -> CAMMINO (v9)
    durata (hold) -> lunghezza live | velocity -> larghezza+impasto+opacita'
-   intervallo -> angolo | note rapide -> frusta+schizzi | tenute -> campiture
+   intervallo -> svolta | ripetizione -> rosetta/impasto | pausa -> passo a vuoto
+   note rapide -> frusta+schizzi | tenute -> campiture
    ========================================================================= */
 const MARGIN = 80;
-const PLAYHEAD_PX_S = 235;                   // tempo -> X
-function yFromMidi(m){                       // acuto = ALTO (flip corretto)
-  const t = Math.min(1, Math.max(0, (m - 40) / (86 - 40)));
-  return (H - 80) - t * (H - 160);
-}
+const PLAYHEAD_PX_S = 235;                   // avanzamento nel silenzio
 
-let clockX = MARGIN;
+/* ── passeggiata melodica (v9): la melodia DISEGNA UN CAMMINO ────────────────
+   Ogni nota parte dove finisce la precedente; l'intervallo melodico e' la
+   svolta (6°/semitono, clamp ±48°); la ripetizione della stessa nota non
+   avanza ma si accumula in rosetta a girasole (angolo aureo, r∝√k);
+   uno sterzo dolce riporta il cammino in tela vicino ai bordi. */
+const SEMI_TURN = Math.PI / 30;              // 6° per semitono
+const MAX_TURN  = Math.PI / 180 * 48;
+const walk = { x: 0, y: 0, th: 0, lastMidi: null, lastOnAt: -1e9,
+               clusterK: 0, ax: 0, ay: 0,    // ancora della rosetta
+               bx: 0, by: 0, bang: 0 };      // base dell'evento corrente
+function walkReset(){
+  walk.x = W * 0.15; walk.y = H * 0.70;
+  walk.th = -16 * Math.PI / 180;
+  walk.lastMidi = null; walk.lastOnAt = -1e9; walk.clusterK = 0;
+  walk.ax = walk.x; walk.ay = walk.y;
+  walk.bx = walk.x; walk.by = walk.y; walk.bang = walk.th;
+}
+function wrapA(a){
+  while (a >  Math.PI) a -= 2 * Math.PI;
+  while (a <= -Math.PI) a += 2 * Math.PI;
+  return a;
+}
+function walkSteer(){
+  const m = 120;
+  const near = Math.min(walk.x - m, W - m - walk.x, walk.y - m, H - m - walk.y);
+  if (near < 130){
+    const target = Math.atan2(H * 0.50 - walk.y, W * 0.54 - walk.x);
+    const d = wrapA(target - walk.th);
+    const k = Math.min(1, (130 - near) / 130);
+    walk.th = wrapA(walk.th + Math.max(-0.55, Math.min(0.55, d)) * 0.8 * k);
+  }
+  // il tempo va avanti: mai camminare all'indietro
+  const lim = Math.PI / 180 * 115;
+  if (Math.abs(walk.th) > lim) walk.th = Math.sign(walk.th) * lim;
+  walk.x = Math.max(m, Math.min(W - m, walk.x));
+  walk.y = Math.max(m, Math.min(H - m, walk.y));
+}
 let lastNoteWall = -1e9, lastNoteOnWall = -1e9, prevMidi = null;
 const activeNotes = new Map();               // id -> {strokes:[], voice}
 const fading = [];                           // pennellate in rilascio
@@ -557,13 +590,38 @@ function noteOn(id, midi, vel, opts){
   const gap = now - lastNoteOnWall;
   lastNoteOnWall = now;
 
-  const x = clockX, y = yFromMidi(midi);
   const conc = opts.colorConc || noteConc(midi);
-
-  // angolo = direzione melodica (intervallo dalla nota precedente)
   const iv = prevMidi === null ? 0 : midi - prevMidi;
-  prevMidi = midi;
-  let ang = -Math.max(-14, Math.min(14, iv)) / 14 * 0.96 + (rand()-0.5) * 0.10;
+
+  let x, y, ang;
+  if (opts.secondary){
+    // voce acuta del dyad: perpendicolare sopra la voce base, non tocca il cammino
+    const off = opts.dyadOff || 0;
+    x = walk.bx + Math.sin(walk.bang) * off;
+    y = walk.by - Math.cos(walk.bang) * off;
+    ang = walk.bang + (rand()-0.5) * 0.06;
+  } else {
+    // ── la passeggiata: svolta melodica poi passo ──────────────────────────
+    walk.th = wrapA(walk.th - Math.max(-MAX_TURN, Math.min(MAX_TURN, iv * SEMI_TURN)));
+    walkSteer();
+    // ripetizione della stessa nota → rosetta a girasole sull'ancora
+    if (midi === walk.lastMidi && now - walk.lastOnAt < 1600){
+      walk.clusterK++;
+      const ga = walk.clusterK * 2.39996;
+      const r = velParams(vel).width * 0.88 * Math.sqrt(walk.clusterK);
+      x = walk.ax + r * Math.cos(ga);
+      y = walk.ay + r * Math.sin(ga);
+      ang = walk.th + Math.sin(walk.clusterK * 2.4) * 0.30;
+    } else {
+      walk.clusterK = 0;
+      walk.ax = walk.x; walk.ay = walk.y;
+      x = walk.x; y = walk.y;
+      ang = walk.th + (rand()-0.5) * 0.10;
+    }
+    walk.lastMidi = midi; walk.lastOnAt = now;
+    walk.bx = x; walk.by = y; walk.bang = ang;   // base per la voce del dyad
+    prevMidi = midi;
+  }
   // intervalli grandi -> archi curvi (~1.2 rad totali su ~200 px)
   let curvRate = opts.curvRate !== undefined ? opts.curvRate
     : (Math.abs(iv) >= 7 ? -Math.sign(iv) * Math.min(Math.abs(iv), 14) / 14 * 0.006
@@ -604,7 +662,9 @@ function noteOn(id, midi, vel, opts){
   const voice = audioNoteOn(midi, vel, opts.fifth);
   if (opts.glideTo != null)
     audioGlide(voice, opts.glideTo, opts.glideDelay || 0.02, opts.glideTime || 0.12);
-  activeNotes.set(id, { strokes, voice });
+  activeNotes.set(id, { strokes, voice,
+                        primary: !opts.secondary,
+                        clustered: walk.clusterK > 0 });
   return { x, y, ang, conc };
 }
 
@@ -618,6 +678,14 @@ function noteOff(id){
       st.relLen = Math.max(10, Math.min(60, st.arc * 0.3)) * (0.75 + 0.5 * rand());
     }
     if (st.alive) fading.push(st);
+  }
+  // il cammino avanza fino alla punta del tratto (+ un respiro);
+  // le note della rosetta non muovono l'ancora (la ripetizione accumula)
+  if (n.primary && !n.clustered && n.strokes.length){
+    const st = n.strokes[0];
+    walk.x = st.x + Math.cos(walk.th) * 8;
+    walk.y = st.y + Math.sin(walk.th) * 8;
+    walkSteer();
   }
   audioNoteOff(n.voice);
   lastNoteWall = performance.now();
@@ -701,10 +769,12 @@ function tick(now){
   const dt = Math.min((now - lastT) / 1000, 0.05); lastT = now;
   dirtyReset();
 
-  // playhead: scorre finche' si suona, pausa dopo 2.2 s di silenzio
-  if (activeNotes.size > 0 || now - lastNoteWall < 2200){
-    clockX += PLAYHEAD_PX_S * dt;
-    if (clockX > W - MARGIN) clockX = MARGIN;           // wrap: si riparte
+  // il silenzio fa avanzare il cammino senza dipingere (pausa = tela nuda);
+  // si ferma dopo 2.2 s — il quadro aspetta la prossima nota
+  if (activeNotes.size === 0 && now - lastNoteWall < 2200){
+    walk.x += Math.cos(walk.th) * PLAYHEAD_PX_S * 0.35 * dt;
+    walk.y += Math.sin(walk.th) * PLAYHEAD_PX_S * 0.35 * dt;
+    walkSteer();
   }
   runDemoQueue(now);
 
@@ -868,7 +938,7 @@ function runDemo(){
   document.getElementById('btnDemo').disabled = true;
   ensureAudio();
   prevMidi = null;
-  clockX = MARGIN + 30;
+  walkReset();
   const BEAT = 60000 / DEMO_BPM;             // 168 bpm -> ~357 ms/beat
   const t0 = performance.now() + 200;
   demoQ = [];
@@ -881,8 +951,13 @@ function runDemo(){
       const on  = t0 + n.t * BEAT;
       const off = on + n.d * BEAT * holdF;
       endT = Math.max(endT, off);
+      const opts = techOpts(n.tech, m, n, k);
+      if (k > 0){                            // voce acuta del dyad
+        opts.secondary = true;
+        opts.dyadOff = (m - notes[0]) * 2.4;
+      }
       demoQ.push({ t: on, type: 'on', id, midi: m, vel: n.vel,
-                   opts: techOpts(n.tech, m, n, k), tech: n.tech });
+                   opts, tech: n.tech });
       demoQ.push({ t: off, type: 'off', id });
     });
   });
@@ -1023,7 +1098,7 @@ function newCanvas(seedBump){
     for (const id of [...activeNotes.keys()]) noteOff(id);
     fading.length = 0; demoQ = []; demoRunning = false; window.__demoDone = false;
     document.getElementById('btnDemo').disabled = false;
-    prevMidi = null; clockX = MARGIN;
+    prevMidi = null; walkReset();
     paintGround();
     relightRegion(0, 0, W, H);
     veil.classList.remove('on');
