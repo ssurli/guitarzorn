@@ -26,6 +26,14 @@
 
   const ZORN_URL = window.GUITARZORN_URL || '../guitarzorn/live/guitarzorn_live.html';
 
+  // In Guitar Improv Lab, LOOPER e' un `const` globale di uno script classico:
+  // un const NON diventa window.LOOPER, ma resta accessibile per nome nudo
+  // (stesso ambiente lessicale globale condiviso fra script classici).
+  function getLooper() {
+    try { if (typeof LOOPER !== 'undefined' && LOOPER) return LOOPER; } catch (e) {}
+    return window.LOOPER || null;
+  }
+
   /* ── pitch detection (fallback identico all'algoritmo del tuner) ─────────── */
   function localAutocorrelate(buf, sampleRate) {
     const n = buf.length;
@@ -181,7 +189,7 @@
   }
 
   function paintLoop() {
-    const L = window.LOOPER;
+    const L = getLooper();
     if (!L || !L.buffer) {
       alert('Registra prima un giro con il Looper (REC), poi premi DIPINGI.');
       return;
@@ -196,7 +204,7 @@
   }
 
   function exportJSON() {
-    const L = window.LOOPER;
+    const L = getLooper();
     if (!L || !L.buffer) { alert('Registra prima un loop.'); return; }
     const events = transcribe(L.buffer);
     const blob = new Blob([JSON.stringify({ bpm: 60, events }, null, 2)],
