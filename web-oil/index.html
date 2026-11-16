@@ -38,7 +38,7 @@ button:focus-visible { outline: 2px solid var(--ochre); outline-offset: 2px; }
 .pad button:active { background: var(--wall-2); border-color: var(--cream); }
 canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-ratio: 3 / 2; }
 .score { display: grid; gap: 2px; overflow-x: auto; }
-.score ol { list-style: none; margin: 0; padding: 0; display: flex; gap: 2px; min-width: 760px; }
+.score ol { list-style: none; margin: 0; padding: 0; display: flex; gap: 2px; min-width: 1100px; }
 .score li { flex-basis: 0; min-width: 0; padding: 8px 8px 9px; background: var(--wall-2); border-top: 2px solid var(--rule); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .score li b { display: flex; align-items: center; gap: 6px; font-family: var(--display); font-weight: 400; font-size: 18px; letter-spacing: 0; color: var(--cream); text-transform: none; margin-bottom: 3px; }
 .score li i { width: 10px; height: 10px; border-radius: 50%; flex: none; border: 1px solid var(--muted); }
@@ -56,6 +56,7 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
     </div>
     <div class="controls">
       <span class="seed">seed · <span id="seed-out">42</span></span>
+      <button id="audio" type="button" aria-pressed="true">Audio sì</button>
       <button id="replay" type="button">Demo</button>
       <button id="repaint" type="button">Nuova tela</button>
     </div>
@@ -66,8 +67,8 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
     <p class="eyebrow">Suona · La minore pentatonica · Z X C V B · A S D F G · W E R T Y · Maiusc = forte</p>
     <div class="pad" id="pad"></div>
   </div>
-  <div class="score" aria-label="Spartito: le dodici note del riff"><ol id="score"></ol></div>
-  <p class="note">Tieni premuto: il pennello avanza finché la nota dura, e quando la lasci si alza e si asciuga. Arrivato al bordo destro ricomincia da sinistra e dipinge sopra. Ogni punto della tela è una miscela dei quattro pigmenti di Zorn. Il pennello deposita colore, raccoglie quello che attraversa e si scarica: una nota lunga finisce a pennello asciutto.</p>
+  <div class="score" aria-label="Spartito: l'intro di Johnny B. Goode, quattro battute"><ol id="score"></ol></div>
+  <p class="note">Al primo caricamento la demo è muta, perché il browser non suona finché non tocchi la pagina: premi «Demo» per sentirla. Tieni premuto: il pennello avanza finché la nota dura, e quando la lasci si alza e si asciuga. Arrivato al bordo destro ricomincia da sinistra e dipinge sopra. Ogni punto della tela è una miscela dei quattro pigmenti di Zorn. Il pennello deposita colore, raccoglie quello che attraversa e si scarica: una nota lunga finisce a pennello asciutto.</p>
 </div>
 <script src="riff-paint-oil.js"></script>
 <script>
@@ -75,68 +76,198 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
   const G = window.GuitarzornPaint7, canvas = document.getElementById('painting'), list = document.getElementById('score');
   const statusEl = document.getElementById('status'), seedOut = document.getElementById('seed-out'), head = document.getElementById('playhead');
   const SW = { A: 'var(--ochre)', C: 'var(--vermilion)', D: 'var(--ink)', E: 'var(--white)', G: 'var(--gblend)' };
+  const PC = { 9: 'A', 0: 'C', 1: 'C', 2: 'D', 4: 'E', 7: 'G' };
   const IDLE = 'motore web · olio bagnato su bagnato · quattro pigmenti';
-  const BEAT_MS = 620, still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  G.RIFF.forEach(n => {
-    const li = document.createElement('li'); li.style.flexGrow = n.duration;
-    const b = document.createElement('b'), dot = document.createElement('i'); dot.style.background = SW[n.note];
-    b.append(dot, n.note); li.append(b, n.technique.replace(/_/g, ' ')); list.append(li);
+  const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ---- il riff: intro di Johnny B. Goode in La, 4 battute shuffle (tempi in battiti) ----
+  const RIFF = [
+    { midi: 64, t: 0.000, d: 0.667, vel: 1.20, tech: 'slide', glideTo: 67 },
+    { midi: 67, t: 0.667, d: 0.333, vel: 0.95, tech: 'staccato' },
+    { midi: 67, t: 1.000, d: 1.000, vel: 1.40, tech: 'bend', bendTo: 69 },
+    { midi: 67, t: 2.000, d: 0.667, vel: 1.20, tech: 'legato' },
+    { midi: 64, t: 2.667, d: 0.333, vel: 0.95, tech: 'legato' },
+    { midi: 67, t: 3.000, d: 0.667, vel: 1.20, tech: 'legato' },
+    { midi: 64, t: 3.667, d: 0.333, vel: 0.95, tech: 'legato' },
+    { midi: 69, t: 4.000, d: 0.667, vel: 1.20, tech: 'staccato' },
+    { midi: 67, t: 4.667, d: 0.333, vel: 1.20, tech: 'legato' },
+    { midi: 64, t: 5.000, d: 0.667, vel: 0.95, tech: 'legato' },
+    { midi: 62, t: 5.667, d: 0.333, vel: 0.95, tech: 'legato' },
+    { midi: 60, t: 6.000, d: 0.333, vel: 1.20, tech: 'hammer_on', glideTo: 61 },
+    { midi: 61, t: 6.333, d: 0.334, vel: 1.20, tech: 'legato' },
+    { midi: 57, t: 6.667, d: 1.333, vel: 1.20, tech: 'vibrato' },
+    { dyad: [64, 69], t: 8.000, d: 0.30, vel: 1.20, tech: 'double_stop' },
+    { dyad: [64, 69], t: 8.667, d: 0.30, vel: 0.95, tech: 'double_stop' },
+    { dyad: [64, 69], t: 9.000, d: 0.30, vel: 1.20, tech: 'double_stop' },
+    { dyad: [64, 69], t: 9.667, d: 0.30, vel: 0.95, tech: 'double_stop' },
+    { dyad: [64, 69], t: 10.000, d: 0.30, vel: 1.20, tech: 'double_stop' },
+    { dyad: [64, 69], t: 10.667, d: 0.30, vel: 0.95, tech: 'double_stop' },
+    { dyad: [64, 69], t: 11.000, d: 0.30, vel: 1.20, tech: 'double_stop' },
+    { dyad: [64, 69], t: 11.667, d: 0.30, vel: 0.95, tech: 'double_stop' },
+    { dyad: [64, 69], t: 12.000, d: 2.000, vel: 1.40, tech: 'double_stop_final' },
+  ];
+  const DEMO_BPM = 168, DEMO_BEATS = 14.4, BEAT_MS = 60000 / DEMO_BPM;
+  RIFF.forEach(ev => {
+    const li = document.createElement('li'); li.style.flexGrow = Math.max(ev.d, 0.3);
+    const b = document.createElement('b');
+    (ev.dyad || [ev.midi]).forEach(m => { const dot = document.createElement('i'); dot.style.background = SW[PC[m % 12]]; b.append(dot); });
+    b.append((ev.dyad || [ev.midi]).map(m => PC[m % 12]).join('+')); li.append(b, ev.tech.replace(/_/g, ' ')); list.append(li);
   });
   const cells = [...list.children];
 
-  // ---- live playing: La minore pentatonica su tre ottave -------------------
-  // riga bassa Z X C V B · riga centrale A S D F G · riga alta W E R T Y
-  const KEYS = { KeyZ: 45, KeyX: 48, KeyC: 50, KeyV: 52, KeyB: 55, KeyA: 57, KeyS: 60, KeyD: 62, KeyF: 64, KeyG: 67, KeyW: 69, KeyE: 72, KeyR: 74, KeyT: 76, KeyY: 79 };
-  const PC = { 9: 'A', 0: 'C', 2: 'D', 4: 'E', 7: 'G' };
+  // ---- audio: una corda pizzicata sintetica -------------------------------
+  let AC = null, master = null, audioOn = true;
+  function ensureAudio() {
+    if (AC) return;
+    try {
+      AC = new (window.AudioContext || window.webkitAudioContext)();
+      master = AC.createGain(); master.gain.value = 0.85;
+      const comp = AC.createDynamicsCompressor(); master.connect(comp); comp.connect(AC.destination);
+    } catch (e) { AC = null; }
+  }
+  function pluck(midi, vel, when) {
+    const f = 440 * Math.pow(2, (midi - 69) / 12);
+    const o1 = AC.createOscillator(); o1.type = 'sawtooth'; o1.frequency.value = f;
+    const o2 = AC.createOscillator(); o2.type = 'triangle'; o2.frequency.value = f * 2.003;
+    const g2 = AC.createGain(); g2.gain.value = 0.3;
+    const filt = AC.createBiquadFilter(); filt.type = 'lowpass'; filt.Q.value = 1.1;
+    filt.frequency.setValueAtTime(900 + 2400 * Math.min(vel, 1.4), when);
+    filt.frequency.exponentialRampToValueAtTime(420, when + 0.7);
+    const g = AC.createGain(), peak = 0.16 * Math.min(vel, 1.4) + 0.02;
+    g.gain.setValueAtTime(0.0001, when);
+    g.gain.linearRampToValueAtTime(peak, when + 0.008);
+    g.gain.exponentialRampToValueAtTime(Math.max(peak * 0.28, 0.001), when + 0.55);
+    o1.connect(filt); o2.connect(g2); g2.connect(filt); filt.connect(g); g.connect(master);
+    o1.start(when); o2.start(when);
+    return { o1, o2, g };
+  }
+  function soundOn(midi, vel, glideTo, glideDelay, glideTime) {
+    if (!audioOn) return null;
+    ensureAudio(); if (!AC) return null;
+    if (AC.state === 'suspended') AC.resume().catch(() => {});
+    if (AC.state !== 'running') return null;             // senza un gesto dell'utente il browser non suona
+    const v = pluck(midi, vel, AC.currentTime);
+    if (glideTo != null) {
+      const f = 440 * Math.pow(2, (glideTo - 69) / 12), t = AC.currentTime + (glideDelay || 0.02);
+      try {
+        v.o1.frequency.setValueAtTime(v.o1.frequency.value, t); v.o1.frequency.exponentialRampToValueAtTime(f, t + glideTime);
+        v.o2.frequency.setValueAtTime(v.o2.frequency.value, t); v.o2.frequency.exponentialRampToValueAtTime(f * 2.003, t + glideTime);
+      } catch (e) {}
+    }
+    return v;
+  }
+  function soundOff(v) {
+    if (!AC || !v) return;
+    const t = AC.currentTime;
+    try {
+      v.g.gain.cancelScheduledValues(t); v.g.gain.setValueAtTime(Math.max(v.g.gain.value, 0.0001), t);
+      v.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22); v.o1.stop(t + 0.3); v.o2.stop(t + 0.3);
+    } catch (e) {}
+  }
+  const voices = new Map();                               // id -> voce che suona
+
+  // ---- stato della tela -----------------------------------------------------
   const MX = 90, MY = 110, PX_S = 150, LO = 45, HI = 79;
   let eng = null, ready = false, run = 0, liveT0 = null, prevMidi = null, lastOn = 0;
+  const yOf = (midi, lo, hi) => eng.height - MY - (midi - lo) / (hi - lo) * (eng.height - 2 * MY);
+  function startNote(id, midi, vel, gesture, glide) {
+    eng.noteOn(id, Object.assign({ note: PC[midi % 12] || 'A', velocity: vel }, gesture));
+    voices.set(id, soundOn(midi, vel, glide && glide.to, glide && glide.delay, glide && glide.time));
+  }
+  function stopNote(id) { if (eng) eng.noteOff(id); soundOff(voices.get(id)); voices.delete(id); }
+
+  // ---- suonare dal vivo: La minore pentatonica su tre ottave --------------
+  // riga bassa Z X C V B · riga centrale A S D F G · riga alta W E R T Y
+  const KEYS = { KeyZ: 45, KeyX: 48, KeyC: 50, KeyV: 52, KeyB: 55, KeyA: 57, KeyS: 60, KeyD: 62, KeyF: 64, KeyG: 67, KeyW: 69, KeyE: 72, KeyR: 74, KeyT: 76, KeyY: 79 };
   function playheadX(now) {
     if (liveT0 === null) liveT0 = now;
     return MX + ((now - liveT0) / 1000 * PX_S) % (eng.width - 2 * MX);   // arrivato a destra ricomincia da sinistra e dipinge sopra
   }
   function liveOn(id, midi, loud) {
     if (!ready) return;
-    const now = performance.now(), iv = prevMidi === null ? 0 : midi - prevMidi, gap = now - lastOn, fast = gap < 170;
+    const now = performance.now(), iv = prevMidi === null ? 0 : midi - prevMidi, fast = now - lastOn < 170;
     prevMidi = midi; lastOn = now;
-    const x = playheadX(now) + (Math.random() - 0.5) * 16;
-    const y = eng.height - MY - (midi - LO) / (HI - LO) * (eng.height - 2 * MY) + (Math.random() - 0.5) * 28;
+    const x = playheadX(now) + (Math.random() - 0.5) * 16, y = yOf(midi, LO, HI) + (Math.random() - 0.5) * 28;
     // il salto melodico orienta il gesto: si sale, il pennello sale; salti grandi, archi
     let ang = Math.max(-1.1, Math.min(1.1, -iv * 0.085)) + (Math.random() - 0.5) * 0.4;
     if ((y > eng.height - MY * 1.4 && ang > 0) || (y < MY * 1.4 && ang < 0)) ang = -ang * 0.5;   // vicino al bordo il gesto rientra
     const curve = (Math.random() - 0.5) * 0.004 + (Math.abs(iv) >= 7 ? Math.sign(iv) * 0.004 : 0);
-    eng.noteOn(id, { note: PC[midi % 12] || 'A', velocity: loud ? 'ff' : (fast ? 'mp' : 'f'), x, y, ang, curve, speed: fast ? 420 : 260, wMul: fast ? 0.8 : 1 });
+    startNote(id, midi, loud ? 1.55 : (fast ? 0.75 : 1.25), { x, y, ang, curve, speed: fast ? 420 : 260, wMul: fast ? 0.8 : 1 });
     statusEl.textContent = 'stai dipingendo…';
   }
-  function liveOff(id) { if (eng) eng.noteOff(id); }
   window.addEventListener('keydown', e => {
     if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || !(e.code in KEYS)) return;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName)) return;
     e.preventDefault(); liveOn(e.code, KEYS[e.code], e.shiftKey);
   });
-  window.addEventListener('keyup', e => { if (e.code in KEYS) liveOff(e.code); });
-  window.addEventListener('blur', () => { Object.keys(KEYS).forEach(liveOff); });
-  // tasti a schermo (ottava centrale), per chi non ha una tastiera
+  window.addEventListener('keyup', e => { if (e.code in KEYS) stopNote(e.code); });
+  window.addEventListener('blur', () => { Object.keys(KEYS).forEach(stopNote); });
   const pad = document.getElementById('pad');
   [['A', 57], ['C', 60], ['D', 62], ['E', 64], ['G', 67]].forEach(([n, midi]) => {
     const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', 'Nota ' + n);
     const dot = document.createElement('i'); dot.style.background = SW[n]; b.append(dot, n);
     b.addEventListener('pointerdown', e => { e.preventDefault(); b.setPointerCapture(e.pointerId); liveOn('pad' + n, midi, false); });
-    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => b.addEventListener(t, () => liveOff('pad' + n)));
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => b.addEventListener(t, () => stopNote('pad' + n)));
     pad.append(b);
   });
 
+  // ---- la demo suona il riff con le stesse pennellate dal vivo -------------
+  // la tecnica cambia COME si muove il pennello, non quale simbolo disegna
+  function demoGesture(ev, midi, voice, nextEv) {
+    const x = MX + ev.t / DEMO_BEATS * (eng.width - 2 * MX) + (Math.random() - 0.5) * 10;
+    const y = yOf(midi, 54, 72) + (Math.random() - 0.5) * 22, j = () => (Math.random() - 0.5);
+    let toward = j() * 0.5;                                 // di norma verso la nota che segue
+    if (nextEv) { const nm = nextEv.dyad ? nextEv.dyad[0] : nextEv.midi; toward = Math.atan2(yOf(nm, 54, 72) - y, (nextEv.t - ev.t) / DEMO_BEATS * (eng.width - 2 * MX)) * 0.6 + j() * 0.25; }
+    const g = { x, y, ang: toward, curve: j() * 0.003, speed: 260 };
+    switch (ev.tech) {
+      case 'staccato': return Object.assign(g, { ang: j() * 0.8, wMul: 1.15, thickMul: 1.3, speed: 200 });
+      case 'legato': return Object.assign(g, { pickup: 0.09, opacity: 0.6, dry: 1.2, thickMul: 0.8 });
+      case 'slide': return Object.assign(g, { ang: (ev.glideTo > midi ? -1.1 : 1.0) + j() * 0.2, curve: 0, speed: 480, dry: 2.0, wMul: 0.95, capacityMul: 0.55 });
+      case 'bend': return Object.assign(g, { ang: 0.25, curve: -0.0085, speed: 300, thickMul: 1.35 });
+      case 'hammer_on': return Object.assign(g, { wMul: 0.9, thickMul: 1.6, speed: 220 });
+      case 'vibrato': return Object.assign(g, { ang: j() * 0.2, wav: 5, wavLen: 62, speed: 300 });
+      case 'double_stop': return Object.assign(g, { ang: -0.15 + j() * 0.3, y: y + voice * 4, thickMul: 1.25, pickup: voice ? 0.1 : 0.04, speed: 230 });
+      case 'double_stop_final': return Object.assign(g, { ang: -0.1 + j() * 0.15, wav: 4.5, wavLen: 78, wMul: 1.25, thickMul: 1.5, pickup: voice ? 0.1 : 0.04, speed: 250, capacityMul: 1.6, maxLen: 700 });
+      default: return g;
+    }
+  }
+  function demoGlide(ev) {
+    if (ev.tech === 'slide') return { to: ev.glideTo, delay: 0.02, time: 0.13 };
+    if (ev.tech === 'hammer_on') return { to: ev.glideTo, delay: 0.05, time: 0.05 };
+    if (ev.tech === 'bend') return { to: ev.bendTo, delay: 0.08, time: 0.22 };
+    return null;
+  }
+  function demoActions() {                                  // [beat, fn] in ordine di tempo
+    const acts = [];
+    RIFF.forEach((ev, i) => {
+      (ev.dyad || [ev.midi]).forEach((midi, voice) => {
+        const id = 'demo' + i + '_' + voice;
+        acts.push([ev.t, () => { startNote(id, midi, ev.vel * (voice ? 0.85 : 1), demoGesture(ev, midi, voice, RIFF[i + 1]), demoGlide(ev)); if (i > 0) cells[i - 1].className = 'done'; cells[i].className = 'on'; }]);
+        acts.push([ev.t + ev.d, () => stopNote(id)]);
+      });
+    });
+    return acts.sort((a, b) => a[0] - b[0]);
+  }
+
   function paint(seed, demo) {
     const me = ++run;
+    for (const id of [...voices.keys()]) stopNote(id);
     ready = false; liveT0 = null; prevMidi = null; head.style.opacity = 0;
     eng = G.create(canvas, seed);
     seedOut.textContent = seed; cells.forEach(c => { c.className = ''; });
     eng.queueGround();
-    const events = demo ? eng.layoutRiff() : [];
-    if (still) { eng.finish(); events.forEach((e, i) => eng.queueEvent(e, events[i + 1])); eng.finish(); if (demo) cells.forEach(c => c.classList.add('done')); }
-    else statusEl.textContent = 'stendo il fondo…';
-    let phase = still ? 2 : 0, t0 = 0, next = 0, last = performance.now();
-    const starts = []; let acc = 0; G.RIFF.forEach(n => { starts.push(acc); acc += n.duration; });
-    if (still) { ready = true; statusEl.textContent = IDLE; }
+    const acts = demo ? demoActions() : [];
+    let phase = 0, t0 = 0, next = 0, last = performance.now();
+    if (still) {                                            // senza animazione: dipingi tutto subito, in silenzio
+      eng.finish(); ready = true;
+      const was = audioOn; audioOn = false;
+      for (let f = 0, dt = 1 / 60; f < (demo ? 60 * (DEMO_BEATS * BEAT_MS / 1000 + 2) : 0); f++) {
+        const beat = f * dt * 1000 / BEAT_MS;
+        while (next < acts.length && beat >= acts[next][0]) acts[next++][1]();
+        eng.tick(900, dt);
+      }
+      audioOn = was; phase = 2; statusEl.textContent = IDLE; if (demo) cells.forEach(c => { c.className = 'done'; });
+    } else statusEl.textContent = 'stendo il fondo…';
     function frame(now) {
       if (me !== run) return;
       const dt = Math.min((now - last) / 1000, 0.05); last = now;
@@ -145,23 +276,22 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
       } else {
         if (phase === 1) {
           const beat = (now - t0) / BEAT_MS;
-          while (next < events.length && beat >= starts[next]) {
-            eng.queueEvent(events[next], events[next + 1]);
-            if (next > 0) cells[next - 1].className = 'done';
-            cells[next].className = 'on'; next++;
-          }
+          while (next < acts.length && beat >= acts[next][0]) acts[next++][1]();
+          head.style.opacity = 1; head.style.left = ((MX + Math.min(Math.max(beat, 0), DEMO_BEATS) / DEMO_BEATS * (eng.width - 2 * MX)) / eng.width * 100) + '%';
         }
         const idle = eng.tick(900, dt);
-        if (phase === 1 && next >= events.length && idle) { phase = 2; cells.forEach(c => { c.className = 'done'; }); statusEl.textContent = IDLE; }
-        if (liveT0 !== null) { head.style.opacity = 1; head.style.left = (playheadX(now) / eng.width * 100) + '%'; }
+        if (phase === 1 && next >= acts.length && idle) { phase = 2; cells.forEach(c => { c.className = 'done'; }); statusEl.textContent = IDLE; head.style.opacity = 0; }
+        if (phase === 2 && liveT0 !== null) { head.style.opacity = 1; head.style.left = (playheadX(now) / eng.width * 100) + '%'; }
       }
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
   }
   let seed = 42;
-  document.getElementById('replay').addEventListener('click', e => { e.currentTarget.blur(); paint(seed, true); });
-  document.getElementById('repaint').addEventListener('click', e => { e.currentTarget.blur(); seed = 1 + Math.floor(Math.random() * 9999); paint(seed, false); });
+  const audioBtn = document.getElementById('audio');
+  audioBtn.addEventListener('click', e => { audioOn = !audioOn; audioBtn.setAttribute('aria-pressed', String(audioOn)); audioBtn.textContent = audioOn ? 'Audio sì' : 'Audio no'; if (!audioOn) for (const id of [...voices.keys()]) { soundOff(voices.get(id)); voices.set(id, null); } e.currentTarget.blur(); });
+  document.getElementById('replay').addEventListener('click', e => { e.currentTarget.blur(); ensureAudio(); if (AC && AC.state === 'suspended') AC.resume().catch(() => {}); paint(seed, true); });
+  document.getElementById('repaint').addEventListener('click', e => { e.currentTarget.blur(); ensureAudio(); if (AC && AC.state === 'suspended') AC.resume().catch(() => {}); seed = 1 + Math.floor(Math.random() * 9999); paint(seed, false); });
   paint(seed, true);
 })();
 </script>

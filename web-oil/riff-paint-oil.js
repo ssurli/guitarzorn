@@ -206,6 +206,7 @@ function create(canvas, seed) {
     const capacity = o.capacity || 380, pickup = o.pickup == null ? 0.04 : o.pickup, opacity = o.opacity == null ? 0.75 : o.opacity;
     const thick = o.thick == null ? 1 : o.thick, dry0 = o.dry == null ? 1.5 : o.dry, smearK = 0.05;
     const minLen = o.minLen == null ? w * 0.9 : o.minLen, maxLen = o.maxLen || 560, curve = o.curve || 0;
+    const wav = o.wav || 0, wavK = 2 * Math.PI / (o.wavLen || 90);          // vibrato: the wrist trembles
     let x = o.x, y = o.y, ang = o.ang, dist = 0, s = 0, releasing = false, wantRelease = false, rel = 0, relLen = 1, done = false, carry = 0;
     const x0 = x, y0 = y;
     return {
@@ -220,7 +221,8 @@ function create(canvas, seed) {
           if (!releasing && (dist >= maxLen || (wantRelease && dist >= minLen))) { releasing = true; relLen = clamp(dist * 0.42, 14, 110); }
           if (releasing) { rel += STEP / relLen; if (rel >= 1) { done = true; break; } }
           ang += curve * STEP + 0.006 * Math.sin(dist * 0.021 + ph);
-          const tx = Math.cos(ang), ty = Math.sin(ang), nx = -ty, ny = tx;
+          const dir = wav ? ang + Math.cos(dist * wavK) * Math.min(wav * wavK, 0.75) : ang;
+          const tx = Math.cos(dir), ty = Math.sin(dir), nx = -ty, ny = tx;
           x += tx * STEP; y += ty * STEP; dist += STEP; s++;
           if (x < -w || y < -w || x > W + w || y > H + w) { done = true; break; }
           const press = sstep(0, rampPx, dist) * (releasing ? Math.pow(1 - rel, 1.15) : 1) * (1 - 0.18 * sstep(60, 260, dist));
@@ -397,12 +399,13 @@ function create(canvas, seed) {
     /** paint one note now (score playback / live input): {note, velocity, technique, duration} at canvas x,y */
     paintNote(n, x, y, beatPx) { queue = queue.concat(noteStrokes({ n, x, y, beatPx: beatPx || 120 }, null)); },
     /** LIVE: the brush lands. id identifies the held note. g: { note:'A'|'C'|'D'|'E'|'G' or pig:[4], velocity:'p'..'ff' or number,
-        x, y, ang (rad), curve (rad/px), speed (px/s), wMul, thickMul } */
+        x, y, ang (rad), curve (rad/px), speed (px/s), wMul, thickMul, capacityMul, dry, pickup, opacity, wav, wavLen, maxLen } */
     noteOn(id, g) {
       if (liveNotes.has(id)) api.noteOff(id);
       const v = typeof g.velocity === 'number' ? g.velocity : (VEL[g.velocity] || 1), bw = 30 * v * (g.wMul || 1);
       const st = makeLiveStroke({ x: g.x, y: g.y, ang: g.ang || 0, curve: g.curve || 0, w: bw, pig: g.pig || NOTE[g.note] || NOTE.A,
-        speed: g.speed, thick: 1.0 * v * (g.thickMul || 1), capacity: 300 + 160 * v });
+        speed: g.speed, thick: 1.0 * v * (g.thickMul || 1), capacity: (300 + 160 * v) * (g.capacityMul || 1),
+        dry: g.dry, pickup: g.pickup, opacity: g.opacity, wav: g.wav, wavLen: g.wavLen, maxLen: g.maxLen });
       liveNotes.set(id, st);
       return st;
     },
