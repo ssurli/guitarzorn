@@ -34,6 +34,8 @@ h2 { font-family: var(--display); font-weight: 400; font-size: 1.25rem; letter-s
 .row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); min-width: 0; }
 .field.grow { flex: 1 1 240px; }
+.field.inline { flex-direction: row; align-items: center; gap: 8px; }
+#suono-msg:empty { display: none; }
 select, input, textarea { font-family: var(--mono); font-size: 13px; letter-spacing: 0; text-transform: none; color: var(--cream); background: var(--wall-2); border: 1px solid var(--rule); padding: 10px 10px; border-radius: 0; min-width: 0; }
 input[type="number"] { width: 9ch; }
 textarea { width: 100%; box-sizing: border-box; line-height: 1.5; white-space: pre; overflow-x: auto; resize: vertical; }
@@ -75,14 +77,16 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
   <header>
     <div>
       <h1>guitar<em>zorn</em></h1>
-      <p class="eyebrow" id="status">pentatonica ↔ tavolozza di Zorn · olio bagnato su bagnato</p>
+      <p class="eyebrow" id="status" aria-live="polite">pentatonica ↔ tavolozza di Zorn · olio bagnato su bagnato</p>
     </div>
     <div class="controls">
       <span class="seed">seed · <span id="seed-out">42</span></span>
+      <label class="field inline">Suono <select id="suono"><option value="classica">Chitarra classica</option><option value="acustica">Chitarra acustica</option><option value="elettrica">Chitarra elettrica</option><option value="sintetico">Sintetico</option></select></label>
       <button id="audio" type="button" aria-pressed="true">Audio sì</button>
       <button id="repaint" type="button">Tela vuota</button>
     </div>
   </header>
+  <p class="hint" id="suono-msg" aria-live="polite"></p>
   <div class="frame"><canvas id="painting" role="img" aria-label="Dipinto generato dalle note: tocchi di colore su fondo ocra a impasto"></canvas></div>
   <div class="track" aria-hidden="true"><span id="playhead"></span></div>
   <div class="score" aria-label="Le note del brano, nell'ordine in cui vengono dipinte"><ol id="score"></ol></div>
@@ -185,8 +189,9 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
     tr.insertCell().textContent = t.forma;
   });
 
-  // ---- audio: una corda pizzicata sintetica -------------------------------
-  let AC = null, master = null, audioOn = true;
+  // ---- audio: chitarre campionate (una registrazione per nota) + sintetizzatore di riserva ----
+  let AC = null, master = null, audioOn = true, timbre = 'classica';
+  const SAMPLE_LO = 40, SAMPLE_HI = 88, BANK = {};          // BANK[timbro][midi] = AudioBuffer
   function ensureAudio() {
     if (AC) return;
     try {
@@ -196,6 +201,23 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
     } catch (e) { AC = null; }
   }
   const wake = () => { ensureAudio(); if (AC && AC.state === 'suspended') AC.resume().catch(() => {}); };
+  function loadTimbre(name) {
+    if (name === 'sintetico' || BANK[name]) return;
+    ensureAudio(); if (!AC) return;
+    const bank = BANK[name] = { ok: 0, failed: 0 }, total = SAMPLE_HI - SAMPLE_LO + 1;
+    const report = () => { if (timbre !== name) return; suonoMsg.textContent = bank.ok + bank.failed < total ? 'carico le note… ' + (bank.ok + bank.failed) + '/' + total : (bank.ok ? '' : 'Campioni non raggiungibili (succede aprendo il file dal disco): uso il sintetico.'); };
+    for (let m = SAMPLE_LO; m <= SAMPLE_HI; m++) {
+      fetch('suoni/' + name + '/' + m + '.mp3').then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+        .then(ab => new Promise((res, rej) => AC.decodeAudioData(ab, res, rej)))
+        .then(buf => { bank[m] = buf; bank.ok++; report(); }, () => { bank.failed++; report(); });
+    }
+  }
+  function sampleVoice(buf, midi, bufMidi, vel, when) {
+    const src = AC.createBufferSource(); src.buffer = buf; src.playbackRate.value = Math.pow(2, (midi - bufMidi) / 12);
+    const g = AC.createGain(); g.gain.value = Math.min(1.5, 0.35 + 0.6 * vel);
+    src.connect(g); g.connect(master); src.start(when);
+    return { g, rate: [src.playbackRate], base: [src.playbackRate.value], nodes: [src], src };
+  }
   function pluck(midi, vel, when) {
     const f = 440 * Math.pow(2, (midi - 69) / 12);
     const o1 = AC.createOscillator(); o1.type = 'sawtooth'; o1.frequency.value = f;
@@ -210,17 +232,23 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
     g.gain.exponentialRampToValueAtTime(Math.max(peak * 0.28, 0.001), when + 0.55);
     o1.connect(filt); o2.connect(g2); g2.connect(filt); filt.connect(g); g.connect(master);
     o1.start(when); o2.start(when);
-    return { o1, o2, g };
+    return { g, rate: [o1.frequency, o2.frequency], base: [f, f * 2.003], nodes: [o1, o2] };
   }
-  function soundOn(midi, vel, glide) {
+  /** glide: {to, delay, time} piega l'intonazione verso un'altra nota (slide, bend); vib: la nota trema */
+  function soundOn(midi, vel, glide, vib) {
     if (!audioOn) return null;
     wake(); if (!AC || AC.state !== 'running') return null;   // senza un gesto dell'utente il browser non suona
-    const v = pluck(midi, vel, AC.currentTime);
+    const now = AC.currentTime, bank = BANK[timbre], bm = Math.max(SAMPLE_LO, Math.min(SAMPLE_HI, midi));
+    const v = timbre !== 'sintetico' && bank && bank[bm] ? sampleVoice(bank[bm], midi, bm, vel, now) : pluck(midi, vel, now);
     if (glide) {
-      const f = 440 * Math.pow(2, (glide.to - 69) / 12), t = AC.currentTime + glide.delay;
+      const k = Math.pow(2, (glide.to - midi) / 12), t = now + glide.delay;
+      v.rate.forEach((p, i) => { try { p.setValueAtTime(v.base[i], t); p.exponentialRampToValueAtTime(v.base[i] * k, t + glide.time); } catch (e) {} });
+    }
+    if (vib && v.src && v.src.detune) {                       // vibrato: l'intonazione oscilla di un quarto di semitono
       try {
-        v.o1.frequency.setValueAtTime(v.o1.frequency.value, t); v.o1.frequency.exponentialRampToValueAtTime(f, t + glide.time);
-        v.o2.frequency.setValueAtTime(v.o2.frequency.value, t); v.o2.frequency.exponentialRampToValueAtTime(f * 2.003, t + glide.time);
+        const lfo = AC.createOscillator(), depth = AC.createGain(); lfo.frequency.value = 5.5;
+        depth.gain.setValueAtTime(0, now); depth.gain.linearRampToValueAtTime(28, now + 0.35);
+        lfo.connect(depth); depth.connect(v.src.detune); lfo.start(now); v.nodes.push(lfo);
       } catch (e) {}
     }
     return v;
@@ -230,7 +258,7 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
     const t = AC.currentTime;
     try {
       v.g.gain.cancelScheduledValues(t); v.g.gain.setValueAtTime(Math.max(v.g.gain.value, 0.0001), t);
-      v.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22); v.o1.stop(t + 0.3); v.o2.stop(t + 0.3);
+      v.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22); v.nodes.forEach(n => n.stop(t + 0.3));
     } catch (e) {}
   }
   const voices = new Map();                               // id → voci che suonano
@@ -266,7 +294,7 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
         pickup: voice && g.raccoltaSeconda ? g.raccoltaSeconda : g.raccolta, opacity: g.opacita == null ? COD.opacitaPer(forza) : g.opacita,
         wav: g.tremolo || (ev.vib ? 5 : 0), wavLen: g.passo || 62,
       });
-      voices.set(id, group.map((m, i) => soundOn(m, forza * (i ? 0.85 : 1) * (voice ? 0.85 : 1), glide)));
+      voices.set(id, group.map((m, i) => soundOn(m, forza * (i ? 0.85 : 1) * (voice ? 0.85 : 1), glide, !!(g.tremolo || ev.vib))));
       ids.push(id);
     });
     return ids;
@@ -361,6 +389,9 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
     requestAnimationFrame(frame);
   }
   let seed = 42;
+  const suonoSel = $('suono'), suonoMsg = $('suono-msg');
+  suonoSel.addEventListener('change', () => { timbre = suonoSel.value; suonoMsg.textContent = ''; loadTimbre(timbre); });
+  loadTimbre(timbre);
   const audioBtn = $('audio');
   audioBtn.addEventListener('click', e => { audioOn = !audioOn; audioBtn.setAttribute('aria-pressed', String(audioOn)); audioBtn.textContent = audioOn ? 'Audio sì' : 'Audio no'; if (!audioOn) for (const vs of voices.values()) vs.forEach(soundOff); e.currentTarget.blur(); });
   $('replay').addEventListener('click', e => { e.currentTarget.blur(); wake(); const piece = currentPiece(); if (piece) paint(seed, piece); });
