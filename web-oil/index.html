@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<!-- SPDX-License-Identifier: EUPL-1.2 · Copyright (c) 2026 Stefano Surlinelli -->
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>guitarzorn — olio nel browser</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400&family=Instrument+Serif:ital@1&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a dark studio wall; the painting hangs full width, the score runs under it as one strip. Single dark look by choice: the canvas is the only light thing on the page. */
+:root {
+  color-scheme: dark;
+  --wall: #14110e; --wall-2: #1e1a15; --rule: #3a3229;
+  --cream: #efe2c6; --muted: #a8977a; --ochre: #c4a46a; --vermilion: #e34234; --ink: #1c1c1c; --white: #f2f2f2; --gblend: #706039;
+  --display: 'Fraunces', Georgia, serif; --italic: 'Instrument Serif', Georgia, serif; --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+}
+body { margin: 0; background: var(--wall); color: var(--cream); font-family: var(--mono); padding-block: 28px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--rule); padding-bottom: 18px; }
+h1 { font-family: var(--display); font-weight: 300; font-size: clamp(1.7rem, 4.2vw, 2.6rem); line-height: 1; letter-spacing: -0.02em; margin: 0 0 10px; text-wrap: balance; }
+h1 em { font-family: var(--italic); font-style: italic; color: var(--ochre); }
+.eyebrow { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.seed { font-size: 12px; color: var(--muted); letter-spacing: 0.06em; font-variant-numeric: tabular-nums; }
+button { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cream); background: transparent; border: 1px solid var(--muted); padding: 11px 16px; cursor: pointer; }
+button:hover { border-color: var(--cream); }
+.seg { display: inline-flex; }
+.seg button + button { border-left: 0; }
+.seg button[aria-pressed="true"] { background: var(--cream); color: var(--wall); border-color: var(--cream); }
+button:focus-visible { outline: 2px solid var(--ochre); outline-offset: 2px; }
+.frame { background: var(--wall-2); padding: clamp(6px, 1.4vw, 14px); }
+canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-ratio: 3 / 2; }
+.score { display: grid; gap: 2px; overflow-x: auto; }
+.score ol { list-style: none; margin: 0; padding: 0; display: flex; gap: 2px; min-width: 760px; }
+.score li { flex-basis: 0; min-width: 0; padding: 8px 8px 9px; background: var(--wall-2); border-top: 2px solid var(--rule); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.score li b { display: flex; align-items: center; gap: 6px; font-family: var(--display); font-weight: 400; font-size: 18px; letter-spacing: 0; color: var(--cream); text-transform: none; margin-bottom: 3px; }
+.score li i { width: 10px; height: 10px; border-radius: 50%; flex: none; border: 1px solid var(--muted); }
+.score li.on { border-top-color: var(--vermilion); color: var(--cream); }
+.score li.done { border-top-color: var(--ochre); }
+.note { font-family: var(--italic); font-style: italic; font-size: 17px; line-height: 1.45; color: var(--muted); max-width: 62ch; margin: 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Johnny B. <em>Goode</em></h1>
+      <p class="eyebrow" id="status">motore web · olio bagnato su bagnato · quattro pigmenti</p>
+    </div>
+    <div class="controls">
+      <span class="seed">seed · <span id="seed-out">42</span></span>
+      <button id="replay" type="button">Ridipingi</button>
+      <button id="repaint" type="button">Nuova tela</button>
+    </div>
+  </header>
+  <div class="frame"><canvas id="painting" role="img" aria-label="Dipinto generato dal riff: tocchi neri, vermiglione e bianchi su fondo ocra a impasto"></canvas></div>
+  <div class="score" aria-label="Spartito: le dodici note del riff"><ol id="score"></ol></div>
+  <p class="note">Ogni punto della tela è una miscela dei quattro pigmenti di Zorn. Il pennello deposita colore, raccoglie quello che attraversa e si scarica: una nota lunga finisce a pennello asciutto.</p>
+</div>
+<script src="riff-paint-oil.js"></script>
+<script>
+(function () {
+  const G = window.GuitarzornPaint7, canvas = document.getElementById('painting'), list = document.getElementById('score');
+  const statusEl = document.getElementById('status'), seedOut = document.getElementById('seed-out');
+  const SW = { A: 'var(--ochre)', C: 'var(--vermilion)', D: 'var(--ink)', E: 'var(--white)', G: 'var(--gblend)' };
+  const BEAT_MS = 620, still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  G.RIFF.forEach(n => {
+    const li = document.createElement('li'); li.style.flexGrow = n.duration;
+    const b = document.createElement('b'), dot = document.createElement('i'); dot.style.background = SW[n.note];
+    b.append(dot, n.note); li.append(b, n.technique.replace(/_/g, ' ')); list.append(li);
+  });
+  const cells = [...list.children];
+  let run = 0;
+  function paint(seed) {
+    const me = ++run, eng = G.create(canvas, seed);
+    seedOut.textContent = seed; cells.forEach(c => { c.className = ''; });
+    eng.queueGround();
+    const events = eng.layoutRiff();
+    if (still) { eng.finish(); events.forEach((e, i) => eng.queueEvent(e, events[i + 1])); eng.finish(); cells.forEach(c => c.classList.add('done')); statusEl.textContent = 'motore web · olio bagnato su bagnato · quattro pigmenti'; return; }
+    statusEl.textContent = 'stendo il fondo…';
+    let phase = 0, t0 = 0, next = 0;
+    const starts = []; let acc = 0; G.RIFF.forEach(n => { starts.push(acc); acc += n.duration; });
+    function frame(now) {
+      if (me !== run) return;
+      if (phase === 0) {
+        if (eng.tick(60000)) { phase = 1; t0 = now + 350; statusEl.textContent = 'lo spartito scorre…'; }
+      } else {
+        const beat = (now - t0) / BEAT_MS;
+        while (next < events.length && beat >= starts[next]) {
+          eng.queueEvent(events[next], events[next + 1]);
+          if (next > 0) cells[next - 1].className = 'done';
+          cells[next].className = 'on'; next++;
+        }
+        const idle = eng.tick(900);
+        if (next >= events.length && idle) { cells.forEach(c => { c.className = 'done'; }); statusEl.textContent = 'motore web · olio bagnato su bagnato · quattro pigmenti'; return; }
+      }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+  let seed = 42;
+  document.getElementById('replay').addEventListener('click', () => paint(seed));
+  document.getElementById('repaint').addEventListener('click', () => { seed = 1 + Math.floor(Math.random() * 9999); paint(seed); });
+  paint(seed);
+})();
+</script>
+</body>
+</html>
