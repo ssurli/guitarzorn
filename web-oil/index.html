@@ -29,6 +29,13 @@ button:hover { border-color: var(--cream); }
 .seg button[aria-pressed="true"] { background: var(--cream); color: var(--wall); border-color: var(--cream); }
 button:focus-visible { outline: 2px solid var(--ochre); outline-offset: 2px; }
 .frame { background: var(--wall-2); padding: clamp(6px, 1.4vw, 14px); }
+.track { position: relative; height: 3px; background: var(--wall-2); margin-top: -14px; }
+#playhead { position: absolute; top: 0; width: 2px; height: 100%; background: var(--vermilion); opacity: 0; transform: translateX(-1px); }
+.play { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.pad { display: flex; gap: 6px; flex-wrap: wrap; }
+.pad button { display: inline-flex; align-items: center; gap: 8px; font-family: var(--display); font-size: 17px; letter-spacing: 0; text-transform: none; padding: 9px 16px; touch-action: none; user-select: none; -webkit-user-select: none; }
+.pad button i { width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--muted); }
+.pad button:active { background: var(--wall-2); border-color: var(--cream); }
 canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-ratio: 3 / 2; }
 .score { display: grid; gap: 2px; overflow-x: auto; }
 .score ol { list-style: none; margin: 0; padding: 0; display: flex; gap: 2px; min-width: 760px; }
@@ -49,20 +56,26 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
     </div>
     <div class="controls">
       <span class="seed">seed · <span id="seed-out">42</span></span>
-      <button id="replay" type="button">Ridipingi</button>
+      <button id="replay" type="button">Demo</button>
       <button id="repaint" type="button">Nuova tela</button>
     </div>
   </header>
   <div class="frame"><canvas id="painting" role="img" aria-label="Dipinto generato dal riff: tocchi neri, vermiglione e bianchi su fondo ocra a impasto"></canvas></div>
+  <div class="track" aria-hidden="true"><span id="playhead"></span></div>
+  <div class="play">
+    <p class="eyebrow">Suona · La minore pentatonica · Z X C V B · A S D F G · W E R T Y · Maiusc = forte</p>
+    <div class="pad" id="pad"></div>
+  </div>
   <div class="score" aria-label="Spartito: le dodici note del riff"><ol id="score"></ol></div>
-  <p class="note">Ogni punto della tela è una miscela dei quattro pigmenti di Zorn. Il pennello deposita colore, raccoglie quello che attraversa e si scarica: una nota lunga finisce a pennello asciutto.</p>
+  <p class="note">Tieni premuto: il pennello avanza finché la nota dura, e quando la lasci si alza e si asciuga. Arrivato al bordo destro ricomincia da sinistra e dipinge sopra. Ogni punto della tela è una miscela dei quattro pigmenti di Zorn. Il pennello deposita colore, raccoglie quello che attraversa e si scarica: una nota lunga finisce a pennello asciutto.</p>
 </div>
 <script src="riff-paint-oil.js"></script>
 <script>
 (function () {
   const G = window.GuitarzornPaint7, canvas = document.getElementById('painting'), list = document.getElementById('score');
-  const statusEl = document.getElementById('status'), seedOut = document.getElementById('seed-out');
+  const statusEl = document.getElementById('status'), seedOut = document.getElementById('seed-out'), head = document.getElementById('playhead');
   const SW = { A: 'var(--ochre)', C: 'var(--vermilion)', D: 'var(--ink)', E: 'var(--white)', G: 'var(--gblend)' };
+  const IDLE = 'motore web · olio bagnato su bagnato · quattro pigmenti';
   const BEAT_MS = 620, still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   G.RIFF.forEach(n => {
     const li = document.createElement('li'); li.style.flexGrow = n.duration;
@@ -70,38 +83,86 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
     b.append(dot, n.note); li.append(b, n.technique.replace(/_/g, ' ')); list.append(li);
   });
   const cells = [...list.children];
-  let run = 0;
-  function paint(seed) {
-    const me = ++run, eng = G.create(canvas, seed);
+
+  // ---- live playing: La minore pentatonica su tre ottave -------------------
+  // riga bassa Z X C V B · riga centrale A S D F G · riga alta W E R T Y
+  const KEYS = { KeyZ: 45, KeyX: 48, KeyC: 50, KeyV: 52, KeyB: 55, KeyA: 57, KeyS: 60, KeyD: 62, KeyF: 64, KeyG: 67, KeyW: 69, KeyE: 72, KeyR: 74, KeyT: 76, KeyY: 79 };
+  const PC = { 9: 'A', 0: 'C', 2: 'D', 4: 'E', 7: 'G' };
+  const MX = 90, MY = 110, PX_S = 150, LO = 45, HI = 79;
+  let eng = null, ready = false, run = 0, liveT0 = null, prevMidi = null, lastOn = 0;
+  function playheadX(now) {
+    if (liveT0 === null) liveT0 = now;
+    return MX + ((now - liveT0) / 1000 * PX_S) % (eng.width - 2 * MX);   // arrivato a destra ricomincia da sinistra e dipinge sopra
+  }
+  function liveOn(id, midi, loud) {
+    if (!ready) return;
+    const now = performance.now(), iv = prevMidi === null ? 0 : midi - prevMidi, gap = now - lastOn, fast = gap < 170;
+    prevMidi = midi; lastOn = now;
+    const x = playheadX(now) + (Math.random() - 0.5) * 16;
+    const y = eng.height - MY - (midi - LO) / (HI - LO) * (eng.height - 2 * MY) + (Math.random() - 0.5) * 28;
+    // il salto melodico orienta il gesto: si sale, il pennello sale; salti grandi, archi
+    let ang = Math.max(-1.1, Math.min(1.1, -iv * 0.085)) + (Math.random() - 0.5) * 0.4;
+    if ((y > eng.height - MY * 1.4 && ang > 0) || (y < MY * 1.4 && ang < 0)) ang = -ang * 0.5;   // vicino al bordo il gesto rientra
+    const curve = (Math.random() - 0.5) * 0.004 + (Math.abs(iv) >= 7 ? Math.sign(iv) * 0.004 : 0);
+    eng.noteOn(id, { note: PC[midi % 12] || 'A', velocity: loud ? 'ff' : (fast ? 'mp' : 'f'), x, y, ang, curve, speed: fast ? 420 : 260, wMul: fast ? 0.8 : 1 });
+    statusEl.textContent = 'stai dipingendo…';
+  }
+  function liveOff(id) { if (eng) eng.noteOff(id); }
+  window.addEventListener('keydown', e => {
+    if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || !(e.code in KEYS)) return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName)) return;
+    e.preventDefault(); liveOn(e.code, KEYS[e.code], e.shiftKey);
+  });
+  window.addEventListener('keyup', e => { if (e.code in KEYS) liveOff(e.code); });
+  window.addEventListener('blur', () => { Object.keys(KEYS).forEach(liveOff); });
+  // tasti a schermo (ottava centrale), per chi non ha una tastiera
+  const pad = document.getElementById('pad');
+  [['A', 57], ['C', 60], ['D', 62], ['E', 64], ['G', 67]].forEach(([n, midi]) => {
+    const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', 'Nota ' + n);
+    const dot = document.createElement('i'); dot.style.background = SW[n]; b.append(dot, n);
+    b.addEventListener('pointerdown', e => { e.preventDefault(); b.setPointerCapture(e.pointerId); liveOn('pad' + n, midi, false); });
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => b.addEventListener(t, () => liveOff('pad' + n)));
+    pad.append(b);
+  });
+
+  function paint(seed, demo) {
+    const me = ++run;
+    ready = false; liveT0 = null; prevMidi = null; head.style.opacity = 0;
+    eng = G.create(canvas, seed);
     seedOut.textContent = seed; cells.forEach(c => { c.className = ''; });
     eng.queueGround();
-    const events = eng.layoutRiff();
-    if (still) { eng.finish(); events.forEach((e, i) => eng.queueEvent(e, events[i + 1])); eng.finish(); cells.forEach(c => c.classList.add('done')); statusEl.textContent = 'motore web · olio bagnato su bagnato · quattro pigmenti'; return; }
-    statusEl.textContent = 'stendo il fondo…';
-    let phase = 0, t0 = 0, next = 0;
+    const events = demo ? eng.layoutRiff() : [];
+    if (still) { eng.finish(); events.forEach((e, i) => eng.queueEvent(e, events[i + 1])); eng.finish(); if (demo) cells.forEach(c => c.classList.add('done')); }
+    else statusEl.textContent = 'stendo il fondo…';
+    let phase = still ? 2 : 0, t0 = 0, next = 0, last = performance.now();
     const starts = []; let acc = 0; G.RIFF.forEach(n => { starts.push(acc); acc += n.duration; });
+    if (still) { ready = true; statusEl.textContent = IDLE; }
     function frame(now) {
       if (me !== run) return;
+      const dt = Math.min((now - last) / 1000, 0.05); last = now;
       if (phase === 0) {
-        if (eng.tick(60000)) { phase = 1; t0 = now + 350; statusEl.textContent = 'lo spartito scorre…'; }
+        if (eng.tick(60000, 0)) { ready = true; phase = demo ? 1 : 2; t0 = now + 350; statusEl.textContent = demo ? 'lo spartito scorre…' : 'tela pronta: suona'; }
       } else {
-        const beat = (now - t0) / BEAT_MS;
-        while (next < events.length && beat >= starts[next]) {
-          eng.queueEvent(events[next], events[next + 1]);
-          if (next > 0) cells[next - 1].className = 'done';
-          cells[next].className = 'on'; next++;
+        if (phase === 1) {
+          const beat = (now - t0) / BEAT_MS;
+          while (next < events.length && beat >= starts[next]) {
+            eng.queueEvent(events[next], events[next + 1]);
+            if (next > 0) cells[next - 1].className = 'done';
+            cells[next].className = 'on'; next++;
+          }
         }
-        const idle = eng.tick(900);
-        if (next >= events.length && idle) { cells.forEach(c => { c.className = 'done'; }); statusEl.textContent = 'motore web · olio bagnato su bagnato · quattro pigmenti'; return; }
+        const idle = eng.tick(900, dt);
+        if (phase === 1 && next >= events.length && idle) { phase = 2; cells.forEach(c => { c.className = 'done'; }); statusEl.textContent = IDLE; }
+        if (liveT0 !== null) { head.style.opacity = 1; head.style.left = (playheadX(now) / eng.width * 100) + '%'; }
       }
       requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
   }
   let seed = 42;
-  document.getElementById('replay').addEventListener('click', () => paint(seed));
-  document.getElementById('repaint').addEventListener('click', () => { seed = 1 + Math.floor(Math.random() * 9999); paint(seed); });
-  paint(seed);
+  document.getElementById('replay').addEventListener('click', e => { e.currentTarget.blur(); paint(seed, true); });
+  document.getElementById('repaint').addEventListener('click', e => { e.currentTarget.blur(); seed = 1 + Math.floor(Math.random() * 9999); paint(seed, false); });
+  paint(seed, true);
 })();
 </script>
 </body>
