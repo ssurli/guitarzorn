@@ -484,36 +484,47 @@ function paintGround(){
     const q = i * 4;
     CONC[q] = GROUND[0]; CONC[q+1] = GROUND[1]; CONC[q+2] = GROUND[2]; CONC[q+3] = GROUND[3];
   }
-  // in spazio KM nero e vermiglio sono potentissimi: concentrazioni minime
-  const variants = [
-    mixConc(GROUND, C_WHITE, 0.08), GROUND, GROUND,
-    mixConc(GROUND, C_BLACK, 0.008), mixConc(GROUND, C_VERM, 0.012)
-  ];
-  let y = -20;
-  while (y < H + 20){
-    let x = -300 + rand() * 220;
-    while (x < W + 50){
-      const L = 350 + rand() * 350;
+  // Fondo a impasto: tre mani di pennellate, direzione da un campo lento,
+  // toni vicini (piu' chiaro, piu' caldo). In spazio KM nero e vermiglio sono
+  // potentissimi: concentrazioni minime.
+  const gw = 8, gh = 6, grid = new Float32Array((gw + 1) * (gh + 1));
+  for (let i = 0; i < grid.length; i++) grid[i] = rand();
+  const flow = (x, y) => {
+    const fx = Math.min(Math.max(x / W, 0), 0.999) * gw, fy = Math.min(Math.max(y / H, 0), 0.999) * gh;
+    const ix = fx | 0, iy = fy | 0; let tx = fx - ix, ty = fy - iy;
+    tx = tx * tx * (3 - 2 * tx); ty = ty * ty * (3 - 2 * ty);
+    const k = iy * (gw + 1) + ix;
+    return grid[k] + (grid[k+1] - grid[k]) * tx + (grid[k+gw+1] - grid[k]) * ty
+         + (grid[k] - grid[k+1] - grid[k+gw+1] + grid[k+gw+2]) * tx * ty;
+  };
+  const lay = (count, wMin, wMax, lMin, lMax, op, thick, dry) => {
+    for (let n = 0; n < count; n++){
+      const x = -60 + rand() * (W + 120), y = -30 + rand() * (H + 60);
+      const L = lMin + rand() * (lMax - lMin), r = rand(), tone = flow(y * 1.3, x * 0.7);
+      const conc = r < 0.45 ? mixConc(GROUND, C_WHITE, 0.03 + 0.10 * tone)
+                 : r < 0.72 ? mixConc(GROUND, C_WHITE, 0.20 + 0.22 * tone)
+                 : r < 0.90 ? mixConc(GROUND, C_VERM, 0.008 + 0.014 * tone)
+                 : GROUND;
+      const ang = (flow(x, y) - 0.5) * 0.9 + (rand() - 0.5) * 0.2 + (rand() < 0.5 ? Math.PI : 0);
       strokeFull({
-        x, y: y + (rand()-0.5) * 12, angle: (rand()-0.5) * 0.08,
-        conc: variants[(rand()*variants.length)|0],
-        width: 40 + rand() * 30, opacity: 0.55 + rand() * 0.23,
-        thickness: 0.12 + rand() * 0.16, curvRate: (rand()-0.5) * 0.0003,
-        dryness: 0.55 + rand() * 0.23, smear: 0.20 + rand() * 0.18,
-        depleteLen: L * 1.3
+        x: x - Math.cos(ang) * L * 0.5, y: y - Math.sin(ang) * L * 0.5, angle: ang,
+        conc, width: wMin + rand() * (wMax - wMin), opacity: op * (0.85 + 0.3 * rand()),
+        thickness: thick * (0.8 + 0.4 * rand()), curvRate: (rand() - 0.5) * 0.0016,
+        dryness: dry, smear: 0.25 + rand() * 0.2, depleteLen: L * 1.4
       }, L);
-      x += L * (0.65 + rand() * 0.25);
     }
-    y += 30 + rand() * 16;
-  }
-  // velatura: ammorbidisce le striature del fondo (blur del buffer conc)
+  };
+  lay(150, 90, 150, 320, 620, 0.70, 0.9, 0.45);   // campitura
+  lay(240, 40,  95, 160, 420, 0.60, 1.1, 0.62);   // lavorazione
+  lay( 70, 26,  60, 120, 320, 0.55, 1.3, 0.78);   // tocchi sciolti
+  // la pasta fresca si assesta: leggera velatura del colore e del rilievo
   for (let k = 0; k < 4; k++){
     for (let i = 0; i < W*H; i++) S1[i] = CONC[i*4 + k];
-    blurRegion(S1, W, H, 8, 2);
+    blurRegion(S1, W, H, 1, 1);
     for (let i = 0; i < W*H; i++) CONC[i*4 + k] = S1[i];
   }
-  // l'impasto del ground resta, appena accennato
-  for (let i = 0; i < W*H; i++) HGT[i] *= 0.5;
+  blurRegion(HGT, W, H, 1, 1);
+  for (let i = 0; i < W*H; i++) HGT[i] *= 0.7;
 }
 
 /* ============================================================================
