@@ -405,7 +405,7 @@ function create(canvas, seed) {
       const v = typeof g.velocity === 'number' ? g.velocity : (VEL[g.velocity] || 1), bw = 30 * v * (g.wMul || 1);
       const st = makeLiveStroke({ x: g.x, y: g.y, ang: g.ang || 0, curve: g.curve || 0, w: bw, pig: g.pig || NOTE[g.note] || NOTE.A,
         speed: g.speed, thick: 1.0 * v * (g.thickMul || 1), capacity: (300 + 160 * v) * (g.capacityMul || 1),
-        dry: g.dry, pickup: g.pickup, opacity: g.opacity, wav: g.wav, wavLen: g.wavLen, maxLen: g.maxLen });
+        dry: g.dry, pickup: g.pickup, opacity: g.opacity, wav: g.wav, wavLen: g.wavLen, maxLen: g.maxLen, soft: g.soft, rampPx: g.rampPx });
       liveNotes.set(id, st);
       return st;
     },

@@ -18,7 +18,7 @@ body { margin: 0; background: var(--wall); color: var(--cream); font-family: var
 .wrap { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
 header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--rule); padding-bottom: 18px; }
 h1 { font-family: var(--display); font-weight: 300; font-size: clamp(1.7rem, 4.2vw, 2.6rem); line-height: 1; letter-spacing: -0.02em; margin: 0 0 10px; text-wrap: balance; }
-h1 em { font-family: var(--italic); font-style: italic; color: var(--ochre); }
+h1 em { font-family: var(--italic); font-style: italic; color: var(--vermilion); }
 .eyebrow { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin: 0; }
 .controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .seed { font-size: 12px; color: var(--muted); letter-spacing: 0.06em; font-variant-numeric: tabular-nums; }
@@ -29,6 +29,29 @@ button:hover { border-color: var(--cream); }
 .seg button[aria-pressed="true"] { background: var(--cream); color: var(--wall); border-color: var(--cream); }
 button:focus-visible { outline: 2px solid var(--ochre); outline-offset: 2px; }
 .frame { background: var(--wall-2); padding: clamp(6px, 1.4vw, 14px); }
+h2 { font-family: var(--display); font-weight: 400; font-size: 1.25rem; letter-spacing: -0.01em; margin: 0; }
+.panel { display: flex; flex-direction: column; gap: 12px; border-top: 1px solid var(--rule); padding-top: 18px; }
+.row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+.field { display: flex; flex-direction: column; gap: 6px; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); min-width: 0; }
+.field.grow { flex: 1 1 240px; }
+select, input, textarea { font-family: var(--mono); font-size: 13px; letter-spacing: 0; text-transform: none; color: var(--cream); background: var(--wall-2); border: 1px solid var(--rule); padding: 10px 10px; border-radius: 0; min-width: 0; }
+input[type="number"] { width: 9ch; }
+textarea { width: 100%; box-sizing: border-box; line-height: 1.5; white-space: pre; overflow-x: auto; resize: vertical; }
+select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--ochre); outline-offset: 1px; }
+button.primary { background: var(--cream); color: var(--wall); border-color: var(--cream); }
+button.primary:hover { background: var(--white); }
+.hint { font-size: 11px; line-height: 1.6; color: var(--muted); margin: 0; max-width: 90ch; letter-spacing: 0.02em; }
+.tables { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 24px; }
+@media (max-width: 760px) { .tables { grid-template-columns: minmax(0, 1fr); } }
+.scroll { overflow-x: auto; min-width: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 12px; }
+caption { text-align: left; font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); padding-bottom: 8px; }
+th, td { text-align: left; vertical-align: top; padding: 7px 12px 7px 0; border-top: 1px solid var(--rule); }
+th { font-weight: 500; color: var(--muted); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; }
+td:first-child { white-space: nowrap; color: var(--cream); }
+td { color: var(--muted); line-height: 1.5; }
+td code { font-family: var(--mono); color: var(--ochre); }
+.sw { display: inline-block; width: 11px; height: 11px; border-radius: 50%; border: 1px solid var(--muted); margin-right: 8px; vertical-align: -1px; }
 .track { position: relative; height: 3px; background: var(--wall-2); margin-top: -14px; }
 #playhead { position: absolute; top: 0; width: 2px; height: 100%; background: var(--vermilion); opacity: 0; transform: translateX(-1px); }
 .play { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
@@ -51,69 +74,116 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
 <div class="wrap">
   <header>
     <div>
-      <h1>Johnny B. <em>Goode</em></h1>
-      <p class="eyebrow" id="status">motore web · olio bagnato su bagnato · quattro pigmenti</p>
+      <h1>guitar<em>zorn</em></h1>
+      <p class="eyebrow" id="status">pentatonica ↔ tavolozza di Zorn · olio bagnato su bagnato</p>
     </div>
     <div class="controls">
       <span class="seed">seed · <span id="seed-out">42</span></span>
       <button id="audio" type="button" aria-pressed="true">Audio sì</button>
-      <button id="replay" type="button">Demo</button>
-      <button id="repaint" type="button">Nuova tela</button>
+      <button id="repaint" type="button">Tela vuota</button>
     </div>
   </header>
-  <div class="frame"><canvas id="painting" role="img" aria-label="Dipinto generato dal riff: tocchi neri, vermiglione e bianchi su fondo ocra a impasto"></canvas></div>
+  <div class="frame"><canvas id="painting" role="img" aria-label="Dipinto generato dalle note: tocchi di colore su fondo ocra a impasto"></canvas></div>
   <div class="track" aria-hidden="true"><span id="playhead"></span></div>
-  <div class="play">
-    <p class="eyebrow">Suona · La minore pentatonica · Z X C V B · A S D F G · W E R T Y · Maiusc = forte</p>
-    <div class="pad" id="pad"></div>
-  </div>
-  <div class="score" aria-label="Spartito: l'intro di Johnny B. Goode, quattro battute"><ol id="score"></ol></div>
-  <p class="note">Al primo caricamento la demo è muta, perché il browser non suona finché non tocchi la pagina: premi «Demo» per sentirla. Tieni premuto: il pennello avanza finché la nota dura, e quando la lasci si alza e si asciuga. Arrivato al bordo destro ricomincia da sinistra e dipinge sopra. Ogni punto della tela è una miscela dei quattro pigmenti di Zorn. Il pennello deposita colore, raccoglie quello che attraversa e si scarica: una nota lunga finisce a pennello asciutto.</p>
+  <div class="score" aria-label="Le note del brano, nell'ordine in cui vengono dipinte"><ol id="score"></ol></div>
+
+  <section class="panel" aria-labelledby="h-brano">
+    <h2 id="h-brano">Brano</h2>
+    <div class="row">
+      <label class="field grow">Esempio <select id="piece"></select></label>
+      <label class="field">Tempo (battiti al minuto) <input id="bpm" type="number" min="30" max="260" step="1" value="168" inputmode="numeric"></label>
+      <label class="field">Colonne per battito <input id="cpb" type="number" min="1" max="12" step="1" value="4" inputmode="numeric"></label>
+      <button id="replay" type="button" class="primary">Suona e dipingi</button>
+    </div>
+    <label class="field">Tablatura (sei righe, cantino in alto) <textarea id="tab" rows="7" spellcheck="false" wrap="off"></textarea></label>
+    <p class="hint" id="tab-msg">La tablatura non scrive il ritmo: qui la posizione orizzontale è il tempo. Simboli letti: 5h7 hammer-on · 7p5 pull-off · 5/7 slide · 7b9 bend · 7~ vibrato · t12 tapping · &lt;12&gt; armonico.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="h-suona">
+    <h2 id="h-suona">Suona a mano</h2>
+    <div class="play">
+      <p class="hint">La minore pentatonica su tre ottave: Z X C V B · A S D F G · W E R T Y. Maiusc = forte. Tieni premuto: il pennello avanza finché la nota dura.</p>
+      <div class="pad" id="pad"></div>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="h-cod">
+    <h2 id="h-cod">La codifica</h2>
+    <p class="note">Una tabella sola traduce la musica in pittura: la nota sceglie il pigmento, l'ottava la luminosità, la tecnica il tipo di pennellata, la dinamica quanto colore.</p>
+    <div class="tables">
+      <div class="scroll"><table id="cod-note"><caption>Nota → colore</caption><thead><tr><th scope="col">Nota</th><th scope="col">Colore</th><th scope="col">Ruolo</th></tr></thead><tbody></tbody></table></div>
+      <div class="scroll"><table id="cod-tec"><caption>Tecnica → pennellata</caption><thead><tr><th scope="col">Tecnica</th><th scope="col">In tablatura</th><th scope="col">Pennellata</th></tr></thead><tbody></tbody></table></div>
+    </div>
+    <p class="hint">Ottava: stessa tinta, più chiara salendo e più scura scendendo. Dinamica: piano = colore trasparente e sottile, forte = saturo e materico.</p>
+  </section>
 </div>
 <script src="riff-paint-oil.js"></script>
+<script src="codifica.js"></script>
+<script src="tab.js"></script>
 <script>
 (function () {
-  const G = window.GuitarzornPaint7, canvas = document.getElementById('painting'), list = document.getElementById('score');
-  const statusEl = document.getElementById('status'), seedOut = document.getElementById('seed-out'), head = document.getElementById('playhead');
-  const SW = { A: 'var(--ochre)', C: 'var(--vermilion)', D: 'var(--ink)', E: 'var(--white)', G: 'var(--gblend)' };
-  const PC = { 9: 'A', 0: 'C', 1: 'C', 2: 'D', 4: 'E', 7: 'G' };
-  const IDLE = 'motore web · olio bagnato su bagnato · quattro pigmenti';
+  const G = window.GuitarzornPaint7, COD = window.GuitarzornCodifica, TAB = window.GuitarzornTab;
+  const $ = id => document.getElementById(id);
+  const canvas = $('painting'), list = $('score'), statusEl = $('status'), seedOut = $('seed-out'), head = $('playhead');
+  const IDLE = 'pentatonica ↔ tavolozza di Zorn · olio bagnato su bagnato';
   const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // colore a schermo di un pigmento (solo per le legende; sulla tela decide il motore)
+  const PIG_RGB = [[240, 188, 70], [224, 70, 34], [44, 34, 27], [248, 240, 220]];
+  const css = p => 'rgb(' + [0, 1, 2].map(c => Math.round(p[0] * PIG_RGB[0][c] + p[1] * PIG_RGB[1][c] + p[2] * PIG_RGB[2][c] + p[3] * PIG_RGB[3][c])).join(',') + ')';
+  const dotFor = midi => { const i = document.createElement('i'); i.style.background = css(COD.pigmentFor(midi)); return i; };
 
-  // ---- il riff: intro di Johnny B. Goode in La, 4 battute shuffle (tempi in battiti) ----
-  const RIFF = [
-    { midi: 64, t: 0.000, d: 0.667, vel: 1.20, tech: 'slide', glideTo: 67 },
-    { midi: 67, t: 0.667, d: 0.333, vel: 0.95, tech: 'staccato' },
-    { midi: 67, t: 1.000, d: 1.000, vel: 1.40, tech: 'bend', bendTo: 69 },
-    { midi: 67, t: 2.000, d: 0.667, vel: 1.20, tech: 'legato' },
-    { midi: 64, t: 2.667, d: 0.333, vel: 0.95, tech: 'legato' },
-    { midi: 67, t: 3.000, d: 0.667, vel: 1.20, tech: 'legato' },
-    { midi: 64, t: 3.667, d: 0.333, vel: 0.95, tech: 'legato' },
-    { midi: 69, t: 4.000, d: 0.667, vel: 1.20, tech: 'staccato' },
-    { midi: 67, t: 4.667, d: 0.333, vel: 1.20, tech: 'legato' },
-    { midi: 64, t: 5.000, d: 0.667, vel: 0.95, tech: 'legato' },
-    { midi: 62, t: 5.667, d: 0.333, vel: 0.95, tech: 'legato' },
-    { midi: 60, t: 6.000, d: 0.333, vel: 1.20, tech: 'hammer_on', glideTo: 61 },
-    { midi: 61, t: 6.333, d: 0.334, vel: 1.20, tech: 'legato' },
-    { midi: 57, t: 6.667, d: 1.333, vel: 1.20, tech: 'vibrato' },
-    { dyad: [64, 69], t: 8.000, d: 0.30, vel: 1.20, tech: 'double_stop' },
-    { dyad: [64, 69], t: 8.667, d: 0.30, vel: 0.95, tech: 'double_stop' },
-    { dyad: [64, 69], t: 9.000, d: 0.30, vel: 1.20, tech: 'double_stop' },
-    { dyad: [64, 69], t: 9.667, d: 0.30, vel: 0.95, tech: 'double_stop' },
-    { dyad: [64, 69], t: 10.000, d: 0.30, vel: 1.20, tech: 'double_stop' },
-    { dyad: [64, 69], t: 10.667, d: 0.30, vel: 0.95, tech: 'double_stop' },
-    { dyad: [64, 69], t: 11.000, d: 0.30, vel: 1.20, tech: 'double_stop' },
-    { dyad: [64, 69], t: 11.667, d: 0.30, vel: 0.95, tech: 'double_stop' },
-    { dyad: [64, 69], t: 12.000, d: 2.000, vel: 1.40, tech: 'double_stop_final' },
-  ];
-  const DEMO_BPM = 168, DEMO_BEATS = 14.4, BEAT_MS = 60000 / DEMO_BPM;
-  RIFF.forEach(ev => {
-    const li = document.createElement('li'); li.style.flexGrow = Math.max(ev.d, 0.3);
-    const b = document.createElement('b');
-    (ev.dyad || [ev.midi]).forEach(m => { const dot = document.createElement('i'); dot.style.background = SW[PC[m % 12]]; b.append(dot); });
-    b.append((ev.dyad || [ev.midi]).map(m => PC[m % 12]).join('+')); li.append(b, ev.tech.replace(/_/g, ' ')); list.append(li);
+  // ---- i brani ---------------------------------------------------------------
+  // Johnny B. Goode: intro in La, 4 battute shuffle. Ha lo swing scritto nei tempi, quindi è in eventi e non in tablatura.
+  const JBG = { id: 'jbg', titolo: 'Johnny B. Goode · intro (con lo swing)', bpm: 168, beats: 14.4, events: [
+    [64, 0.000, 0.667, 1.20, 'slide', 67], [67, 0.667, 0.333, 0.95, 'staccato'], [67, 1.000, 1.000, 1.40, 'bend', 69],
+    [67, 2.000, 0.667, 1.20, 'legato'], [64, 2.667, 0.333, 0.95, 'legato'], [67, 3.000, 0.667, 1.20, 'legato'], [64, 3.667, 0.333, 0.95, 'legato'],
+    [69, 4.000, 0.667, 1.20, 'staccato'], [67, 4.667, 0.333, 1.20, 'legato'], [64, 5.000, 0.667, 0.95, 'legato'], [62, 5.667, 0.333, 0.95, 'legato'],
+    [60, 6.000, 0.333, 1.20, 'normale'], [61, 6.333, 0.334, 1.20, 'hammer_on'], [57, 6.667, 1.333, 1.20, 'vibrato'],
+    [[64, 69], 8.000, 0.30, 1.20, 'double_stop'], [[64, 69], 8.667, 0.30, 0.95, 'double_stop'], [[64, 69], 9.000, 0.30, 1.20, 'double_stop'], [[64, 69], 9.667, 0.30, 0.95, 'double_stop'],
+    [[64, 69], 10.000, 0.30, 1.20, 'double_stop'], [[64, 69], 10.667, 0.30, 0.95, 'double_stop'], [[64, 69], 11.000, 0.30, 1.20, 'double_stop'], [[64, 69], 11.667, 0.30, 0.95, 'double_stop'],
+    [[64, 69], 12.000, 2.000, 1.40, 'double_stop_final'],
+  ].map(([m, t, d, vel, tech, to]) => ({ midis: [].concat(m), t, d, vel, tech, to: to == null ? null : to, vib: false })) };
+  const pieceSel = $('piece'), bpmIn = $('bpm'), cpbIn = $('cpb'), tabIn = $('tab'), tabMsg = $('tab-msg'), TAB_HINT = tabMsg.textContent;
+  [[JBG.id, JBG.titolo]].concat(TAB.ESEMPI.map(e => [e.id, e.titolo]), [['mia', 'La mia tablatura']]).forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; pieceSel.append(o); });
+  function showPiece() {
+    const ex = TAB.ESEMPI.find(e => e.id === pieceSel.value);
+    if (ex) { tabIn.value = ex.tab; bpmIn.value = ex.bpm; }
+    else if (pieceSel.value === 'jbg') { tabIn.value = ''; bpmIn.value = JBG.bpm; }
+    tabIn.placeholder = pieceSel.value === 'jbg' ? 'Questo esempio è scritto in eventi, con lo swing. Scegli uno studio o incolla qui la tua tablatura.' : 'Incolla qui sei righe di tablatura';
+    tabMsg.textContent = TAB_HINT;
+  }
+  pieceSel.addEventListener('change', showPiece);
+  tabIn.addEventListener('input', () => { if (pieceSel.value !== 'mia' && !(TAB.ESEMPI.find(e => e.id === pieceSel.value) || {}).locked) pieceSel.value = 'mia'; });
+  function currentPiece() {
+    const bpm = Math.max(30, Math.min(260, parseFloat(bpmIn.value) || 100));
+    if (pieceSel.value === 'jbg' && !tabIn.value.trim()) return Object.assign({}, JBG, { bpm });
+    const r = TAB.parseTab(tabIn.value, Math.max(1, Math.min(12, parseInt(cpbIn.value, 10) || 4)));
+    if (!r.events.length) { tabMsg.textContent = 'Non trovo una tablatura: servono sei righe con i trattini, una per corda.'; return null; }
+    tabMsg.textContent = r.events.length + ' eventi letti su ' + r.beats + ' battiti' + (r.scartati ? ' · ' + r.scartati + ' gruppi di righe ignorati perché non erano di sei corde' : '') + '.';
+    return { titolo: pieceSel.options[pieceSel.selectedIndex].text, bpm, beats: Math.max(r.beats, 1), events: r.events.map(e => Object.assign({ vel: 1.2 }, e)) };
+  }
+  let cells = [];
+  function buildScore(piece) {
+    list.textContent = '';
+    (piece ? piece.events.slice(0, 64) : []).forEach(ev => {
+      const li = document.createElement('li'), b = document.createElement('b'); li.style.flexGrow = Math.max(ev.d, 0.3);
+      ev.midis.forEach(m => b.append(dotFor(m)));
+      b.append(ev.midis.map(COD.noteName).join('+')); li.append(b, (COD.TECNICHE[ev.tech] || COD.TECNICHE.normale).nome + (ev.vib && ev.tech !== 'vibrato' ? ' ~' : '')); list.append(li);
+    });
+    cells = [...list.children];
+  }
+
+  // ---- la codifica, mostrata -----------------------------------------------
+  [9, 0, 2, 4, 7, 10, 5].forEach(pc => {
+    const n = COD.NOTE[pc], tr = $('cod-note').tBodies[0].insertRow(), c0 = tr.insertCell(), sw = document.createElement('i');
+    sw.className = 'sw'; sw.style.background = css(n.pig); c0.append(sw, n.nome); tr.insertCell().textContent = n.colore; tr.insertCell().textContent = n.ruolo;
   });
-  const cells = [...list.children];
+  { const tr = $('cod-note').tBodies[0].insertRow(); tr.insertCell().textContent = 'altre'; tr.insertCell().textContent = 'Sfumatura tra le due note di scala vicine'; tr.insertCell().textContent = 'esterna'; }
+  Object.keys(COD.TECNICHE).filter(k => k !== 'double_stop_final').forEach(k => {
+    const t = COD.TECNICHE[k], tr = $('cod-tec').tBodies[0].insertRow();
+    tr.insertCell().textContent = t.nome; const c = tr.insertCell(); if (t.simbolo) { const code = document.createElement('code'); code.textContent = t.simbolo; c.append(code); } else c.textContent = '—';
+    tr.insertCell().textContent = t.forma;
+  });
 
   // ---- audio: una corda pizzicata sintetica -------------------------------
   let AC = null, master = null, audioOn = true;
@@ -125,6 +195,7 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
       const comp = AC.createDynamicsCompressor(); master.connect(comp); comp.connect(AC.destination);
     } catch (e) { AC = null; }
   }
+  const wake = () => { ensureAudio(); if (AC && AC.state === 'suspended') AC.resume().catch(() => {}); };
   function pluck(midi, vel, when) {
     const f = 440 * Math.pow(2, (midi - 69) / 12);
     const o1 = AC.createOscillator(); o1.type = 'sawtooth'; o1.frequency.value = f;
@@ -141,17 +212,15 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
     o1.start(when); o2.start(when);
     return { o1, o2, g };
   }
-  function soundOn(midi, vel, glideTo, glideDelay, glideTime) {
+  function soundOn(midi, vel, glide) {
     if (!audioOn) return null;
-    ensureAudio(); if (!AC) return null;
-    if (AC.state === 'suspended') AC.resume().catch(() => {});
-    if (AC.state !== 'running') return null;             // senza un gesto dell'utente il browser non suona
+    wake(); if (!AC || AC.state !== 'running') return null;   // senza un gesto dell'utente il browser non suona
     const v = pluck(midi, vel, AC.currentTime);
-    if (glideTo != null) {
-      const f = 440 * Math.pow(2, (glideTo - 69) / 12), t = AC.currentTime + (glideDelay || 0.02);
+    if (glide) {
+      const f = 440 * Math.pow(2, (glide.to - 69) / 12), t = AC.currentTime + glide.delay;
       try {
-        v.o1.frequency.setValueAtTime(v.o1.frequency.value, t); v.o1.frequency.exponentialRampToValueAtTime(f, t + glideTime);
-        v.o2.frequency.setValueAtTime(v.o2.frequency.value, t); v.o2.frequency.exponentialRampToValueAtTime(f * 2.003, t + glideTime);
+        v.o1.frequency.setValueAtTime(v.o1.frequency.value, t); v.o1.frequency.exponentialRampToValueAtTime(f, t + glide.time);
+        v.o2.frequency.setValueAtTime(v.o2.frequency.value, t); v.o2.frequency.exponentialRampToValueAtTime(f * 2.003, t + glide.time);
       } catch (e) {}
     }
     return v;
@@ -164,120 +233,124 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
       v.g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22); v.o1.stop(t + 0.3); v.o2.stop(t + 0.3);
     } catch (e) {}
   }
-  const voices = new Map();                               // id -> voce che suona
+  const voices = new Map();                               // id → voci che suonano
 
-  // ---- stato della tela -----------------------------------------------------
-  const MX = 90, MY = 110, PX_S = 150, LO = 45, HI = 79;
-  let eng = null, ready = false, run = 0, liveT0 = null, prevMidi = null, lastOn = 0;
+  // ---- dalla codifica al gesto del pennello --------------------------------
+  const MX = 90, MY = 110, PX_S = 150;
+  let eng = null, ready = false, run = 0, liveT0 = null, prevMidi = null, lastOn = 0, lastStroke = null;
   const yOf = (midi, lo, hi) => eng.height - MY - (midi - lo) / (hi - lo) * (eng.height - 2 * MY);
-  function startNote(id, midi, vel, gesture, glide) {
-    eng.noteOn(id, Object.assign({ note: PC[midi % 12] || 'A', velocity: vel }, gesture));
-    voices.set(id, soundOn(midi, vel, glide && glide.to, glide && glide.delay, glide && glide.time));
+  const jit = () => Math.random() - 0.5;
+  /** un evento {midis, tech, to, vib, vel} in posizione (x, y) → pennellate e suono; `angNext` è la direzione verso la nota che segue */
+  function playEvent(idBase, ev, x, yFor, angNext) {
+    const T = COD.TECNICHE[ev.tech] || COD.TECNICHE.normale, g = T.gesto, forza = ev.vel * (g.forza || 1);
+    const glide = ev.to != null ? (ev.tech === 'bend' ? { to: ev.to, delay: 0.08, time: 0.22 } : { to: ev.to, delay: 0.02, time: 0.13 }) : null;
+    const strokes = g.fuso ? [ev.midis] : ev.midis.map(m => [m]);          // power chord: un solo blocco, colori fusi
+    const ids = [];
+    strokes.forEach((group, voice) => {
+      const midi = group[0];
+      let pig = group.map(COD.pigmentFor).reduce((a, b, i) => i ? COD.mix(a, b, 1 / (i + 1)) : b);
+      if (g.chiaro) pig = COD.mix(pig, COD.BIANCO, g.chiaro);
+      if (g.scuro) pig = COD.mix(pig, COD.NERO, g.scuro);
+      let ang;
+      if (g.dir === 'verso') ang = (ev.to != null && ev.to < midi ? 1 : -1) * (g.angolo || 1) + jit() * 0.2;
+      else if (g.dir === 'fissa') ang = (g.angolo || 0) + jit() * (g.apertura == null ? 0.2 : g.apertura);
+      else if (g.dir === 'libera') ang = jit() * (g.apertura == null ? 0.8 : g.apertura);
+      else ang = angNext == null ? jit() * 0.5 : angNext * 0.6 + jit() * 0.25;
+      let px = x + jit() * 10, py = yFor(midi) + jit() * 22 + voice * 4;
+      if (g.unita && lastStroke) { px = lastStroke.x + jit() * 6; py = lastStroke.y + jit() * 6; }   // parte dove finiva il tocco precedente
+      if ((py > eng.height - MY * 0.9 && ang > 0) || (py < MY * 0.9 && ang < 0)) ang = -ang * 0.5;
+      const id = idBase + '_' + voice;
+      lastStroke = eng.noteOn(id, {
+        pig, velocity: forza, x: px, y: py, ang, curve: g.curva == null ? jit() * 0.003 : g.curva, speed: g.velocita || 260,
+        wMul: g.larghezza, thickMul: g.spessore, capacityMul: g.carica, dry: g.secco, maxLen: g.lunghezzaMax, soft: g.bordo,
+        pickup: voice && g.raccoltaSeconda ? g.raccoltaSeconda : g.raccolta, opacity: g.opacita == null ? COD.opacitaPer(forza) : g.opacita,
+        wav: g.tremolo || (ev.vib ? 5 : 0), wavLen: g.passo || 62,
+      });
+      voices.set(id, group.map((m, i) => soundOn(m, forza * (i ? 0.85 : 1) * (voice ? 0.85 : 1), glide)));
+      ids.push(id);
+    });
+    return ids;
   }
-  function stopNote(id) { if (eng) eng.noteOff(id); soundOff(voices.get(id)); voices.delete(id); }
+  function stopNote(id) { if (eng) eng.noteOff(id); (voices.get(id) || []).forEach(soundOff); voices.delete(id); }
 
-  // ---- suonare dal vivo: La minore pentatonica su tre ottave --------------
-  // riga bassa Z X C V B · riga centrale A S D F G · riga alta W E R T Y
+  // ---- suonare a mano: La minore pentatonica su tre ottave -----------------
   const KEYS = { KeyZ: 45, KeyX: 48, KeyC: 50, KeyV: 52, KeyB: 55, KeyA: 57, KeyS: 60, KeyD: 62, KeyF: 64, KeyG: 67, KeyW: 69, KeyE: 72, KeyR: 74, KeyT: 76, KeyY: 79 };
+  const held = new Map();
   function playheadX(now) {
     if (liveT0 === null) liveT0 = now;
     return MX + ((now - liveT0) / 1000 * PX_S) % (eng.width - 2 * MX);   // arrivato a destra ricomincia da sinistra e dipinge sopra
   }
-  function liveOn(id, midi, loud) {
-    if (!ready) return;
+  function liveOn(key, midi, loud) {
+    if (!ready || held.has(key)) return;
     const now = performance.now(), iv = prevMidi === null ? 0 : midi - prevMidi, fast = now - lastOn < 170;
     prevMidi = midi; lastOn = now;
-    const x = playheadX(now) + (Math.random() - 0.5) * 16, y = yOf(midi, LO, HI) + (Math.random() - 0.5) * 28;
-    // il salto melodico orienta il gesto: si sale, il pennello sale; salti grandi, archi
-    let ang = Math.max(-1.1, Math.min(1.1, -iv * 0.085)) + (Math.random() - 0.5) * 0.4;
-    if ((y > eng.height - MY * 1.4 && ang > 0) || (y < MY * 1.4 && ang < 0)) ang = -ang * 0.5;   // vicino al bordo il gesto rientra
-    const curve = (Math.random() - 0.5) * 0.004 + (Math.abs(iv) >= 7 ? Math.sign(iv) * 0.004 : 0);
-    startNote(id, midi, loud ? 1.55 : (fast ? 0.75 : 1.25), { x, y, ang, curve, speed: fast ? 420 : 260, wMul: fast ? 0.8 : 1 });
+    const ev = { midis: [midi], tech: 'normale', to: null, vib: false, vel: loud ? 1.55 : (fast ? 0.75 : 1.25) };
+    // a mano non c'è tecnica scritta: il salto melodico orienta il gesto
+    held.set(key, playEvent('k' + key, ev, playheadX(now), m => yOf(m, 45, 79), Math.max(-1.1, Math.min(1.1, -iv * 0.14))));
     statusEl.textContent = 'stai dipingendo…';
   }
+  function liveOff(key) { (held.get(key) || []).forEach(stopNote); held.delete(key); }
   window.addEventListener('keydown', e => {
     if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || !(e.code in KEYS)) return;
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName)) return;
     e.preventDefault(); liveOn(e.code, KEYS[e.code], e.shiftKey);
   });
-  window.addEventListener('keyup', e => { if (e.code in KEYS) stopNote(e.code); });
-  window.addEventListener('blur', () => { Object.keys(KEYS).forEach(stopNote); });
-  const pad = document.getElementById('pad');
-  [['A', 57], ['C', 60], ['D', 62], ['E', 64], ['G', 67]].forEach(([n, midi]) => {
-    const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', 'Nota ' + n);
-    const dot = document.createElement('i'); dot.style.background = SW[n]; b.append(dot, n);
+  window.addEventListener('keyup', e => { if (e.code in KEYS) liveOff(e.code); });
+  window.addEventListener('blur', () => { [...held.keys()].forEach(liveOff); });
+  [57, 60, 62, 64, 67].forEach(midi => {
+    const n = COD.noteName(midi), b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-label', 'Nota ' + n);
+    b.append(dotFor(midi), n);
     b.addEventListener('pointerdown', e => { e.preventDefault(); b.setPointerCapture(e.pointerId); liveOn('pad' + n, midi, false); });
-    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => b.addEventListener(t, () => stopNote('pad' + n)));
-    pad.append(b);
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => b.addEventListener(t, () => liveOff('pad' + n)));
+    $('pad').append(b);
   });
 
-  // ---- la demo suona il riff con le stesse pennellate dal vivo -------------
-  // la tecnica cambia COME si muove il pennello, non quale simbolo disegna
-  function demoGesture(ev, midi, voice, nextEv) {
-    const x = MX + ev.t / DEMO_BEATS * (eng.width - 2 * MX) + (Math.random() - 0.5) * 10;
-    const y = yOf(midi, 54, 72) + (Math.random() - 0.5) * 22, j = () => (Math.random() - 0.5);
-    let toward = j() * 0.5;                                 // di norma verso la nota che segue
-    if (nextEv) { const nm = nextEv.dyad ? nextEv.dyad[0] : nextEv.midi; toward = Math.atan2(yOf(nm, 54, 72) - y, (nextEv.t - ev.t) / DEMO_BEATS * (eng.width - 2 * MX)) * 0.6 + j() * 0.25; }
-    const g = { x, y, ang: toward, curve: j() * 0.003, speed: 260 };
-    switch (ev.tech) {
-      case 'staccato': return Object.assign(g, { ang: j() * 0.8, wMul: 1.15, thickMul: 1.3, speed: 200 });
-      case 'legato': return Object.assign(g, { pickup: 0.09, opacity: 0.6, dry: 1.2, thickMul: 0.8 });
-      case 'slide': return Object.assign(g, { ang: (ev.glideTo > midi ? -1.1 : 1.0) + j() * 0.2, curve: 0, speed: 480, dry: 2.0, wMul: 0.95, capacityMul: 0.55 });
-      case 'bend': return Object.assign(g, { ang: 0.25, curve: -0.0085, speed: 300, thickMul: 1.35 });
-      case 'hammer_on': return Object.assign(g, { wMul: 0.9, thickMul: 1.6, speed: 220 });
-      case 'vibrato': return Object.assign(g, { ang: j() * 0.2, wav: 5, wavLen: 62, speed: 300 });
-      case 'double_stop': return Object.assign(g, { ang: -0.15 + j() * 0.3, y: y + voice * 4, thickMul: 1.25, pickup: voice ? 0.1 : 0.04, speed: 230 });
-      case 'double_stop_final': return Object.assign(g, { ang: -0.1 + j() * 0.15, wav: 4.5, wavLen: 78, wMul: 1.25, thickMul: 1.5, pickup: voice ? 0.1 : 0.04, speed: 250, capacityMul: 1.6, maxLen: 700 });
-      default: return g;
-    }
-  }
-  function demoGlide(ev) {
-    if (ev.tech === 'slide') return { to: ev.glideTo, delay: 0.02, time: 0.13 };
-    if (ev.tech === 'hammer_on') return { to: ev.glideTo, delay: 0.05, time: 0.05 };
-    if (ev.tech === 'bend') return { to: ev.bendTo, delay: 0.08, time: 0.22 };
-    return null;
-  }
-  function demoActions() {                                  // [beat, fn] in ordine di tempo
-    const acts = [];
-    RIFF.forEach((ev, i) => {
-      (ev.dyad || [ev.midi]).forEach((midi, voice) => {
-        const id = 'demo' + i + '_' + voice;
-        acts.push([ev.t, () => { startNote(id, midi, ev.vel * (voice ? 0.85 : 1), demoGesture(ev, midi, voice, RIFF[i + 1]), demoGlide(ev)); if (i > 0) cells[i - 1].className = 'done'; cells[i].className = 'on'; }]);
-        acts.push([ev.t + ev.d, () => stopNote(id)]);
-      });
+  // ---- suonare un brano: stesse pennellate, tecnica scritta ----------------
+  function pieceActions(piece) {
+    const all = piece.events.flatMap(e => e.midis), lo0 = Math.min(...all), hi0 = Math.max(...all), pad = Math.max(2, (14 - (hi0 - lo0)) / 2);
+    const lo = lo0 - pad, hi = hi0 + pad, wrap = piece.beats <= 18 ? piece.beats : 16, span = eng.width - 2 * MX;
+    const xOf = t => MX + (t % wrap) / wrap * span, acts = [];
+    piece.events.forEach((ev, i) => {
+      const nx = piece.events[i + 1]; let ids = [];
+      acts.push([ev.t, () => {
+        const angNext = nx ? Math.atan2(yOf(nx.midis[0], lo, hi) - yOf(ev.midis[0], lo, hi), Math.max(8, (nx.t - ev.t) / wrap * span)) : null;
+        ids = playEvent('p' + i, ev, xOf(ev.t), m => yOf(m, lo, hi), angNext);
+        if (cells[i - 1]) cells[i - 1].className = 'done'; if (cells[i]) cells[i].className = 'on';
+      }]);
+      acts.push([ev.t + ev.d, () => ids.forEach(stopNote)]);
     });
-    return acts.sort((a, b) => a[0] - b[0]);
+    return { acts: acts.sort((a, b) => a[0] - b[0]), xOf, end: piece.beats };
   }
 
-  function paint(seed, demo) {
+  function paint(seed, piece) {
     const me = ++run;
     for (const id of [...voices.keys()]) stopNote(id);
-    ready = false; liveT0 = null; prevMidi = null; head.style.opacity = 0;
+    held.clear(); ready = false; liveT0 = null; prevMidi = null; lastStroke = null; head.style.opacity = 0;
     eng = G.create(canvas, seed);
-    seedOut.textContent = seed; cells.forEach(c => { c.className = ''; });
+    seedOut.textContent = seed; buildScore(piece);
     eng.queueGround();
-    const acts = demo ? demoActions() : [];
+    const plan = piece ? pieceActions(piece) : null, acts = plan ? plan.acts : [], beatMs = piece ? 60000 / piece.bpm : 500;
     let phase = 0, t0 = 0, next = 0, last = performance.now();
     if (still) {                                            // senza animazione: dipingi tutto subito, in silenzio
       eng.finish(); ready = true;
       const was = audioOn; audioOn = false;
-      for (let f = 0, dt = 1 / 60; f < (demo ? 60 * (DEMO_BEATS * BEAT_MS / 1000 + 2) : 0); f++) {
-        const beat = f * dt * 1000 / BEAT_MS;
+      for (let f = 0, dt = 1 / 60; piece && f < 60 * ((plan.end + 4) * beatMs / 1000); f++) {
+        const beat = f * dt * 1000 / beatMs;
         while (next < acts.length && beat >= acts[next][0]) acts[next++][1]();
         eng.tick(900, dt);
       }
-      audioOn = was; phase = 2; statusEl.textContent = IDLE; if (demo) cells.forEach(c => { c.className = 'done'; });
+      audioOn = was; phase = 2; statusEl.textContent = IDLE; cells.forEach(c => { c.className = 'done'; });
     } else statusEl.textContent = 'stendo il fondo…';
     function frame(now) {
       if (me !== run) return;
       const dt = Math.min((now - last) / 1000, 0.05); last = now;
       if (phase === 0) {
-        if (eng.tick(60000, 0)) { ready = true; phase = demo ? 1 : 2; t0 = now + 350; statusEl.textContent = demo ? 'lo spartito scorre…' : 'tela pronta: suona'; }
+        if (eng.tick(60000, 0)) { ready = true; phase = piece ? 1 : 2; t0 = now + 350; statusEl.textContent = piece ? piece.titolo + ' · ' + piece.bpm + ' al minuto' : 'tela pronta: suona'; }
       } else {
         if (phase === 1) {
-          const beat = (now - t0) / BEAT_MS;
+          const beat = (now - t0) / beatMs;
           while (next < acts.length && beat >= acts[next][0]) acts[next++][1]();
-          head.style.opacity = 1; head.style.left = ((MX + Math.min(Math.max(beat, 0), DEMO_BEATS) / DEMO_BEATS * (eng.width - 2 * MX)) / eng.width * 100) + '%';
+          head.style.opacity = 1; head.style.left = (plan.xOf(Math.min(Math.max(beat, 0), plan.end - 0.001)) / eng.width * 100) + '%';
         }
         const idle = eng.tick(900, dt);
         if (phase === 1 && next >= acts.length && idle) { phase = 2; cells.forEach(c => { c.className = 'done'; }); statusEl.textContent = IDLE; head.style.opacity = 0; }
@@ -288,11 +361,12 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
     requestAnimationFrame(frame);
   }
   let seed = 42;
-  const audioBtn = document.getElementById('audio');
-  audioBtn.addEventListener('click', e => { audioOn = !audioOn; audioBtn.setAttribute('aria-pressed', String(audioOn)); audioBtn.textContent = audioOn ? 'Audio sì' : 'Audio no'; if (!audioOn) for (const id of [...voices.keys()]) { soundOff(voices.get(id)); voices.set(id, null); } e.currentTarget.blur(); });
-  document.getElementById('replay').addEventListener('click', e => { e.currentTarget.blur(); ensureAudio(); if (AC && AC.state === 'suspended') AC.resume().catch(() => {}); paint(seed, true); });
-  document.getElementById('repaint').addEventListener('click', e => { e.currentTarget.blur(); ensureAudio(); if (AC && AC.state === 'suspended') AC.resume().catch(() => {}); seed = 1 + Math.floor(Math.random() * 9999); paint(seed, false); });
-  paint(seed, true);
+  const audioBtn = $('audio');
+  audioBtn.addEventListener('click', e => { audioOn = !audioOn; audioBtn.setAttribute('aria-pressed', String(audioOn)); audioBtn.textContent = audioOn ? 'Audio sì' : 'Audio no'; if (!audioOn) for (const vs of voices.values()) vs.forEach(soundOff); e.currentTarget.blur(); });
+  $('replay').addEventListener('click', e => { e.currentTarget.blur(); wake(); const piece = currentPiece(); if (piece) paint(seed, piece); });
+  $('repaint').addEventListener('click', e => { e.currentTarget.blur(); wake(); seed = 1 + Math.floor(Math.random() * 9999); paint(seed, null); });
+  showPiece();
+  paint(seed, currentPiece());
 })();
 </script>
 </body>
