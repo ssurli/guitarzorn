@@ -180,6 +180,89 @@ function create(canvas, seed) {
     };
   }
 
+
+  // ---- a LIVE stroke: it does not know how long the note will last ---------
+  // The brush lands at noteOn, travels while the note is held, and on noteOff
+  // lifts over a short release (thinner, drier). Held long enough it simply
+  // runs out of paint. o: x, y, ang, curve (rad/px), w, pig, speed (px/s),
+  // capacity, thick, dry, pickup, opacity, soft, rampPx, maxLen
+  const STEP = 1.25;
+  function makeLiveStroke(o) {
+    const w = o.w, nb = Math.max(8, Math.round(w * 1.7));
+    const off = new Float32Array(nb), load = new Float32Array(nb), bh = new Float32Array(nb), q = new Float32Array(nb * 4), wander = new Float32Array(nb), delayD = new Float32Array(nb), liftAt = new Float32Array(nb);
+    const rampPx = o.rampPx == null ? Math.max(8, w * 0.55) : o.rampPx, ph = R(0, 100), soft = o.soft == null ? 0.95 : o.soft;
+    for (let b = 0; b < nb; b++) {
+      const u = (b + R(-0.5, 0.5)) / nb * 2 - 1;
+      off[b] = u * w * 0.5;
+      const clump = 0.5 + 0.5 * Math.sin(u * 2.6 + ph) * Math.sin(u * 5.9 + ph * 1.7);
+      const edge = 1 - soft * Math.pow(Math.abs(u), 1.5);
+      load[b] = (0.7 + 0.5 * clump) * edge * R(0.75, 1.15);
+      bh[b] = 0.45 + 1.0 * clump * R(0.85, 1.1);
+      for (let k = 0; k < 4; k++) q[b * 4 + k] = o.pig[k];
+      wander[b] = R(0, 100);
+      delayD[b] = rampPx * 1.3 * u * u * R(0.7, 1.2) + R(0, rampPx * 0.25);   // the brush lands rounded…
+      liftAt[b] = 1 - 1.05 * u * u * R(0.7, 1.2) - R(0, 0.12);               // …and lifts rounded
+    }
+    const capacity = o.capacity || 380, pickup = o.pickup == null ? 0.04 : o.pickup, opacity = o.opacity == null ? 0.75 : o.opacity;
+    const thick = o.thick == null ? 1 : o.thick, dry0 = o.dry == null ? 1.5 : o.dry, smearK = 0.05;
+    const minLen = o.minLen == null ? w * 0.9 : o.minLen, maxLen = o.maxLen || 560, curve = o.curve || 0;
+    let x = o.x, y = o.y, ang = o.ang, dist = 0, s = 0, releasing = false, wantRelease = false, rel = 0, relLen = 1, done = false, carry = 0;
+    const x0 = x, y0 = y;
+    return {
+      w, x0, y0, speed: o.speed || 260,
+      get x() { return x; }, get y() { return y; }, get length() { return dist; }, get done() { return done; },
+      release() { wantRelease = true; },
+      /** advance by a distance in px (fractions are carried to the next call) */
+      advancePx(px) {
+        carry += px / STEP;
+        let steps = carry | 0; carry -= steps;
+        for (; steps > 0 && !done; steps--) {
+          if (!releasing && (dist >= maxLen || (wantRelease && dist >= minLen))) { releasing = true; relLen = clamp(dist * 0.42, 14, 110); }
+          if (releasing) { rel += STEP / relLen; if (rel >= 1) { done = true; break; } }
+          ang += curve * STEP + 0.006 * Math.sin(dist * 0.021 + ph);
+          const tx = Math.cos(ang), ty = Math.sin(ang), nx = -ty, ny = tx;
+          x += tx * STEP; y += ty * STEP; dist += STEP; s++;
+          if (x < -w || y < -w || x > W + w || y > H + w) { done = true; break; }
+          const press = sstep(0, rampPx, dist) * (releasing ? Math.pow(1 - rel, 1.15) : 1) * (1 - 0.18 * sstep(60, 260, dist));
+          const dry = dry0 * (1 + 1.3 * rel), spread = 0.72 + 0.28 * press;
+          if (x - w < dx0) dx0 = x - w; if (y - w < dy0) dy0 = y - w; if (x + w > dx1) dx1 = x + w; if (y + w > dy1) dy1 = y + w;
+          for (let b = 0; b < nb; b++) {
+            if (dist < delayD[b] || (releasing && rel > liftAt[b])) continue;
+            const wob = (1.2 + 2.2 * Math.abs(off[b]) / w) * Math.sin(s * 0.045 + wander[b]);
+            const bx = x + nx * (off[b] * spread + wob), by = y + ny * (off[b] * spread + wob);
+            const ix = bx | 0, iy = by | 0;
+            if (ix < 0 || iy < 0 || ix >= W - 1 || iy >= H - 1) continue;
+            const i = iy * W + ix, lb = load[b], q4 = b * 4;
+            const wet = clamp(lb * 1.6, 0, 1);
+            const touches = tooth[i] < press * (0.3 + 1.7 * wet) / dry;
+            const a = touches ? clamp(opacity * press * (0.2 + 0.8 * wet), 0, 1) : 0;
+            const smear = smearK * press, aa = a > smear ? a : smear;
+            const pu = pickup * press, c4 = i * 4;
+            q[q4] += (P[c4] - q[q4]) * pu; q[q4 + 1] += (P[c4 + 1] - q[q4 + 1]) * pu; q[q4 + 2] += (P[c4 + 2] - q[q4 + 2]) * pu; q[q4 + 3] += (P[c4 + 3] - q[q4 + 3]) * pu;
+            const fx = bx - ix, fy = by - iy;
+            for (let j = 0; j < 4; j++) {
+              const wgt = (j & 1 ? fx : 1 - fx) * (j & 2 ? fy : 1 - fy) + 0.3;
+              const k = (i + (j & 1) + (j & 2 ? W : 0)), k4 = k * 4, al = aa * wgt > 1 ? 1 : aa * wgt;
+              P[k4] += (q[q4] - P[k4]) * al; P[k4 + 1] += (q[q4 + 1] - P[k4 + 1]) * al; P[k4 + 2] += (q[q4 + 2] - P[k4 + 2]) * al; P[k4 + 3] += (q[q4 + 3] - P[k4 + 3]) * al;
+              const target = thick * bh[b] * (0.25 + 0.75 * wet) * press;
+              Ht[k] += (target - Ht[k]) * (a * wgt > 1 ? 1 : a * wgt) * 0.55;
+            }
+            load[b] = lb - a / capacity * 1.6;
+            if (load[b] < 0) load[b] = 0;
+          }
+        }
+        return done;
+      },
+    };
+  }
+  // a clean dry brush dragged through a finished live mark, start to end
+  function smudgeLive(st) {
+    const L = Math.hypot(st.x - st.x0, st.y - st.y0), a = Math.atan2(st.y - st.y0, st.x - st.x0) + R(-0.2, 0.2), bw = st.w;
+    const len = L * 1.15 + bw * 2, sx = st.x0 - Math.cos(a) * bw * 0.9, sy = st.y0 - Math.sin(a) * bw * 0.9, pts = [];
+    for (let j = 0; j <= 3; j++) { const t = j / 3; pts.push([sx + Math.cos(a) * len * t + R(-3, 3), sy + Math.sin(a) * len * t + R(-3, 3)]); }
+    return makeStroke(pts, { w: bw * R(1.5, 2.1), pig: pig(0.9, 0.02, 0, 0.08), load: 0, capacity: 100, pickup: 0.22, opacity: 0, smear: R(0.10, 0.2), flat: 1, soft: 0.9, ramp: 0.3, taper: 0.9, dry: 1 });
+  }
+
   // ---- light the relief, turn pigment into colour -------------------------
   const LX = -0.46, LY = -0.60, LZ = 0.655, d = img.data;
   function relight() {
@@ -302,6 +385,7 @@ function create(canvas, seed) {
 
   // ---- public API ----------------------------------------------------------
   let queue = [];
+  const liveNotes = new Map(), liveFading = [];   // strokes of held notes / strokes lifting off
   const api = {
     width: W, height: H, RIFF,
     queueGround() { queue = queue.concat(groundStrokes()); },
@@ -312,12 +396,33 @@ function create(canvas, seed) {
     queueRiff(riff) { const ev = layout(riff || RIFF); ev.forEach((e, i) => { queue = queue.concat(noteStrokes(e, ev[i + 1])); }); },
     /** paint one note now (score playback / live input): {note, velocity, technique, duration} at canvas x,y */
     paintNote(n, x, y, beatPx) { queue = queue.concat(noteStrokes({ n, x, y, beatPx: beatPx || 120 }, null)); },
-    /** advance the queued strokes by a budget of brush steps; returns true when the queue is empty */
-    tick(budget) {
+    /** LIVE: the brush lands. id identifies the held note. g: { note:'A'|'C'|'D'|'E'|'G' or pig:[4], velocity:'p'..'ff' or number,
+        x, y, ang (rad), curve (rad/px), speed (px/s), wMul, thickMul } */
+    noteOn(id, g) {
+      if (liveNotes.has(id)) api.noteOff(id);
+      const v = typeof g.velocity === 'number' ? g.velocity : (VEL[g.velocity] || 1), bw = 30 * v * (g.wMul || 1);
+      const st = makeLiveStroke({ x: g.x, y: g.y, ang: g.ang || 0, curve: g.curve || 0, w: bw, pig: g.pig || NOTE[g.note] || NOTE.A,
+        speed: g.speed, thick: 1.0 * v * (g.thickMul || 1), capacity: 300 + 160 * v });
+      liveNotes.set(id, st);
+      return st;
+    },
+    /** LIVE: the brush starts to lift (it still finishes its release over the next frames) */
+    noteOff(id) { const st = liveNotes.get(id); if (!st) return; liveNotes.delete(id); st.release(); liveFading.push(st); },
+    get liveCount() { return liveNotes.size + liveFading.length; },
+    /** advance the queued strokes by a budget of brush steps, and the live strokes by dt seconds; true when nothing is left to paint */
+    tick(budget, dt) {
+      if (dt) {
+        for (const st of liveNotes.values()) if (st.advancePx(st.speed * dt)) st.release();
+        for (let i = liveFading.length - 1; i >= 0; i--) {
+          const st = liveFading[i];
+          if (st.advancePx(st.speed * dt)) { liveFading.splice(i, 1); if (st.length > 6) queue.push(smudgeLive(st)); }
+        }
+        for (const [id, st] of liveNotes) if (st.done) { liveNotes.delete(id); if (st.length > 6) queue.push(smudgeLive(st)); }
+      }
       let left = budget;
       while (left > 0 && queue.length) { const s = queue[0]; s.advance(Math.min(left, 60)); left -= 60; if (s.done) queue.shift(); }
       relight();
-      return queue.length === 0;
+      return queue.length === 0 && liveNotes.size === 0 && liveFading.length === 0;
     },
     finish() { while (queue.length) { queue[0].advance(1e9); queue.shift(); } relight(); },
     get pending() { return queue.length; },
