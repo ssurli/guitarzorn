@@ -319,6 +319,7 @@ function relightRegion(bx0, by0, bx1, by1){
    dry-brush sulla trama, smearing EMA, aratura della pasta (creste, T2).
    ========================================================================= */
 const _dc = [0,0,0,0];
+const SPLAT_K = 0.85;                       // 1.7 setole/px su 4 pixel: stessa copertura di prima
 function makeStroke(o){
   const width = Math.max(3, o.width);
   const nS = Math.max(7, Math.round(width * 1.7));
@@ -404,34 +405,44 @@ function stampStep(st){
   for (let j = 0; j < st.nS; j++){
     const s = -1 + j * invS;
     const X = cx + nx * s * half, Y = cy + ny * s * half;
-    const xi = Math.round(X), yi = Math.round(Y);
-    if (xi < 0 || xi >= W || yi < 0 || yi >= H) continue;
-    const p = yi * W + xi;
-    if (p === lastP) continue; lastP = p;
+    const xf = Math.floor(X), yf = Math.floor(Y);
+    if (xf < 0 || xf >= W - 1 || yf < 0 || yf >= H - 1) continue;
     let edge = (1 - Math.abs(s)) * 3; if (edge > 1) edge = 1;
     edge = Math.pow(edge, 0.65);
     const d = dep * st.bristle[j] * st.streakB[j] * strMul;
-    let a = (d > 1.25 ? 1.25 : d) * edge;
-    if (a <= 0.012) continue;
-    // dry-brush: dove il pigmento scarseggia aggrappa solo la trama alta
+    const a0 = (d > 1.25 ? 1.25 : d) * edge;
+    if (a0 <= 0.012) continue;
     const need = Math.min(Math.max((effDry * 1.15 - d) / Math.max(effDry, 1e-3), 0), 1);
-    let gate = (WEAVE[p] + (1 - need) - 0.82) / 0.22;
-    gate = gate < 0 ? 0 : (gate > 1 ? 1 : gate);
-    a *= (0.12 + 0.88 * gate) * st.opacity;
-    if (a <= 0.01) continue;
-    if (a > 0.88) a = 0.88;
-    const q = p * 4;                                     // compositing in spazio KM
-    CONC[q]   += (_dc[0] - CONC[q])   * a;
-    CONC[q+1] += (_dc[1] - CONC[q+1]) * a;
-    CONC[q+2] += (_dc[2] - CONC[q+2]) * a;
-    CONC[q+3] += (_dc[3] - CONC[q+3]) * a;
-    // impasto + aratura: il pennello raschia la pasta e la spinge ai bordi (T2)
-    let hAdd = a * d; if (hAdd > 1.4) hAdd = 1.4;
-    hAdd *= 0.70 * st.thickness;
-    if (a > 0.3){ const pl = HGT[p] * 0.10 * a; HGT[p] -= pl; st.plowAcc += pl; }
-    let hv = HGT[p] + hAdd; HGT[p] = hv > 5 ? 5 : hv;
-    dirtyAdd(xi, yi);
-    if (e0 < 0) e0 = p; e1 = p;
+    // impronta morbida: la setola si distribuisce sui 4 pixel che tocca
+    // (bilineare). Nei tratti obliqui non restano pixel scoperti a retino.
+    const fx = X - xf, fy = Y - yf;
+    const pn = (yf + (fy >= 0.5 ? 1 : 0)) * W + xf + (fx >= 0.5 ? 1 : 0);
+    let hit = false;
+    for (let c = 0; c < 4; c++){
+      const wgt = (c & 1 ? fx : 1 - fx) * (c & 2 ? fy : 1 - fy);
+      if (wgt < 0.03) continue;
+      const p = (yf + (c >> 1)) * W + xf + (c & 1);
+      // dry-brush: dove il pigmento scarseggia aggrappa solo la trama alta
+      let gate = (WEAVE[p] + (1 - need) - 0.82) / 0.22;
+      gate = gate < 0 ? 0 : (gate > 1 ? 1 : gate);
+      let a = a0 * (0.12 + 0.88 * gate) * st.opacity * wgt * SPLAT_K;
+      if (a <= 0.004) continue;
+      if (a > 0.88) a = 0.88;
+      const q = p * 4;                                   // compositing in spazio KM
+      CONC[q]   += (_dc[0] - CONC[q])   * a;
+      CONC[q+1] += (_dc[1] - CONC[q+1]) * a;
+      CONC[q+2] += (_dc[2] - CONC[q+2]) * a;
+      CONC[q+3] += (_dc[3] - CONC[q+3]) * a;
+      // impasto + aratura: il pennello raschia la pasta e la spinge ai bordi (T2)
+      let hAdd = a * d; if (hAdd > 1.4) hAdd = 1.4;
+      hAdd *= 0.70 * st.thickness;
+      if (a > 0.18){ const pl = HGT[p] * 0.10 * a; HGT[p] -= pl; st.plowAcc += pl; }
+      const hv = HGT[p] + hAdd; HGT[p] = hv > 5 ? 5 : hv;
+      hit = true;
+    }
+    if (!hit) continue;
+    dirtyAdd(xf, yf); dirtyAdd(xf + 1, yf + 1);
+    if (e0 < 0) e0 = pn; e1 = pn;
   }
   if (e0 >= 0){                                          // creste laterali
     let hv = HGT[e0] + st.plowAcc * 0.35; HGT[e0] = hv > 5 ? 5 : hv;
