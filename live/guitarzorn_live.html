@@ -343,6 +343,8 @@ function makeStroke(o){
     depleteLen: o.depleteLen || 420,
     speed: o.speed || 260,
     kandinsky: !!o.kandinsky,
+    kp: o.pickup !== undefined ? o.pickup : 0.03,   // quanto colore raccoglie dalla tela
+    autoRel: o.autoRel || 0,                        // rilascio automatico dopo N px
     arc: 0, trem: 0, sn: 0, sn2: 0,
     releasing: false, relProg: 0, relLen: 26,
     plowAcc: 0, lastEndP: -1, alive: true
@@ -350,6 +352,7 @@ function makeStroke(o){
 }
 
 function stampStep(st){
+  if (st.autoRel && !st.releasing && st.arc >= st.autoRel) st.releasing = true;
   st.trem += (rand() - 0.5) * 0.035; st.trem *= 0.95;   // tremolio della mano
   let a0 = st.ang + st.trem;
   // vibrato: ondulazione come modulazione d'angolo (percorso continuo).
@@ -392,10 +395,11 @@ function stampStep(st){
   // pickup EMA del colore sotto il centro (smearing wet-on-wet)
   const pcx = Math.round(cx), pcy = Math.round(cy);
   if (pcx >= 0 && pcx < W && pcy >= 0 && pcy < H){
-    const q = (pcy * W + pcx) * 4, kp = 0.03;
+    const q = (pcy * W + pcx) * 4, kp = st.kp;
     for (let k = 0; k < 4; k++) st.carried[k] += (CONC[q+k] - st.carried[k]) * kp;
   }
-  const m = st.smear * (0.25 + 0.6 * t);                // piu' sporco in coda
+  let m = st.smear * (0.25 + 0.6 * t);                  // piu' sporco in coda
+  if (m > 1) m = 1;
   for (let k = 0; k < 4; k++) _dc[k] = st.conc[k]*(1-m) + st.carried[k]*m;
 
   st.plowAcc *= 0.35;
@@ -602,6 +606,28 @@ function spawnDroplets(x, y, ang, conc, vel){        // schizzi alla Pollock
   }
 }
 
+/* Sfumatura: finita la nota, un pennello pulito e asciutto ripassa sul segno
+   ancora fresco. Non porta colore suo: raccoglie quello che attraversa e lo
+   trascina, cosi' i bordi si sciolgono nel fondo e resta una coda. */
+function spawnSmudge(src){
+  const dxs = src.x - src.x0, dys = src.y - src.y0, L = Math.hypot(dxs, dys);
+  if (L < 6) return;
+  const ang = Math.atan2(dys, dxs) + (rand() - 0.5) * 0.25;
+  const back = src.width * 0.6;
+  const sx = src.x0 - Math.cos(ang) * back, sy = src.y0 - Math.sin(ang) * back;
+  const px = Math.min(W - 1, Math.max(0, Math.round(sx))), py = Math.min(H - 1, Math.max(0, Math.round(sy)));
+  const q = (py * W + px) * 4;
+  const planned = L * 1.2 + back + src.width * 0.8;
+  const st = makeStroke({
+    x: sx, y: sy, angle: ang, conc: [CONC[q], CONC[q+1], CONC[q+2], CONC[q+3]],
+    width: src.width * (1.3 + 0.4 * rand()), opacity: 0.11 + 0.05 * rand(), thickness: 0.03,
+    dryness: 0.55, smear: 4, pickup: 0.10, depleteLen: planned * 1.5, speed: 520,
+    autoRel: planned * 0.7
+  });
+  st.relLen = Math.max(8, planned * 0.3);
+  fading.push(st);
+}
+
 /* opts: colorConc, waviness, waveLen, curvRate, widthMul, thickMul, dryness,
          slabs, noWhip, speedMul */
 function noteOn(id, midi, vel, opts){
@@ -677,7 +703,9 @@ function noteOn(id, midi, vel, opts){
       width: width * (sI === (slabs-1)/2 ? 1 : 0.8),
       opacity: base.opacity * (sI === (slabs-1)/2 ? 1 : 0.88)
     });
-    strokes.push(makeStroke(o));
+    const stN = makeStroke(o);
+    stN.x0 = o.x; stN.y0 = o.y; stN.smudgeAfter = true;
+    strokes.push(stN);
   }
   if (whip) spawnDroplets(x, y, ang, conc, vel);
 
@@ -811,7 +839,7 @@ function tick(now){
   for (let i = fading.length - 1; i >= 0; i--){
     const st = fading[i];
     if (st.alive) stepAll(st);
-    if (!st.alive) fading.splice(i, 1);
+    if (!st.alive){ fading.splice(i, 1); if (st.smudgeAfter) spawnSmudge(st); }
   }
 
   if (dirty.x1 >= 0){
