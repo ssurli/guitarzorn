@@ -204,13 +204,19 @@ function create(canvas, seed) {
       liftAt[b] = 1 - 1.05 * u * u * R(0.7, 1.2) - R(0, 0.12);               // …and lifts rounded
     }
     const capacity = o.capacity || 380, pickup = o.pickup == null ? 0.04 : o.pickup, opacity = o.opacity == null ? 0.75 : o.opacity;
-    const thick = o.thick == null ? 1 : o.thick, dry0 = o.dry == null ? 1.5 : o.dry, smearK = 0.05;
-    const minLen = o.minLen == null ? w * 0.9 : o.minLen, maxLen = o.maxLen || 560, curve = o.curve || 0;
-    const wav = o.wav || 0, wavK = 2 * Math.PI / (o.wavLen || 90);          // vibrato: the wrist trembles
+    let thick = o.thick == null ? 1 : o.thick, dry0 = o.dry == null ? 1.5 : o.dry; const smearK = 0.05;
+    const minLen = o.minLen == null ? w * 0.9 : o.minLen; let maxLen = o.maxLen || 560, curve = o.curve || 0;
+    let wav = o.wav || 0, wavK = 2 * Math.PI / (o.wavLen || 90), angT = null, speed = o.speed || 260;   // wav: the wrist trembles; angT: the hand turns
     let x = o.x, y = o.y, ang = o.ang, dist = 0, s = 0, releasing = false, wantRelease = false, rel = 0, relLen = 1, done = false, carry = 0;
     const x0 = x, y0 = y;
     return {
-      w, x0, y0, speed: o.speed || 260,
+      w, x0, y0, get speed() { return speed; },
+      /** the hand changes gesture while the note is held (slide, bend, vibrato heard on the instrument) */
+      steer(g) {
+        if (g.ang != null) angT = g.ang; if (g.curve != null) curve = g.curve; if (g.speed != null) speed = g.speed;
+        if (g.dry != null) dry0 = g.dry; if (g.thick != null) thick = g.thick; if (g.maxLen != null) maxLen = g.maxLen;
+        if (g.wav != null) { wav = g.wav; wavK = 2 * Math.PI / (g.wavLen || 62); }
+      },
       get x() { return x; }, get y() { return y; }, get length() { return dist; }, get done() { return done; },
       release() { wantRelease = true; },
       /** advance by a distance in px (fractions are carried to the next call) */
@@ -220,6 +226,7 @@ function create(canvas, seed) {
         for (; steps > 0 && !done; steps--) {
           if (!releasing && (dist >= maxLen || (wantRelease && dist >= minLen))) { releasing = true; relLen = clamp(dist * 0.42, 14, 110); }
           if (releasing) { rel += STEP / relLen; if (rel >= 1) { done = true; break; } }
+          if (angT !== null) ang += (angT - ang) * 0.05;
           ang += curve * STEP + 0.006 * Math.sin(dist * 0.021 + ph);
           const dir = wav ? ang + Math.cos(dist * wavK) * Math.min(wav * wavK, 0.75) : ang;
           const tx = Math.cos(dir), ty = Math.sin(dir), nx = -ty, ny = tx;
@@ -409,6 +416,8 @@ function create(canvas, seed) {
       liveNotes.set(id, st);
       return st;
     },
+    /** LIVE: change the gesture of a held note (see steer) */
+    noteGesture(id, g) { const st = liveNotes.get(id); if (st) st.steer(g); return !!st; },
     /** LIVE: the brush starts to lift (it still finishes its release over the next frames) */
     noteOff(id) { const st = liveNotes.get(id); if (!st) return; liveNotes.delete(id); st.release(); liveFading.push(st); },
     get liveCount() { return liveNotes.size + liveFading.length; },

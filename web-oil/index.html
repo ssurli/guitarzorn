@@ -58,6 +58,11 @@ td code { font-family: var(--mono); color: var(--ochre); }
 #playhead { position: absolute; top: 0; width: 2px; height: 100%; background: var(--vermilion); opacity: 0; transform: translateX(-1px); }
 .play { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .pad { display: flex; gap: 6px; flex-wrap: wrap; }
+.row.mic { align-items: center; }
+.meter { width: 140px; height: 6px; background: var(--wall-2); border: 1px solid var(--rule); position: relative; overflow: hidden; }
+#mic-level { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--ochre); }
+.mic-note { font-family: var(--display); font-size: 18px; color: var(--cream); min-width: 10ch; }
+button.primary[aria-pressed="true"] { background: var(--vermilion); border-color: var(--vermilion); color: var(--white); }
 .pad button { display: inline-flex; align-items: center; gap: 8px; font-family: var(--display); font-size: 17px; letter-spacing: 0; text-transform: none; padding: 9px 16px; touch-action: none; user-select: none; -webkit-user-select: none; }
 .pad button i { width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--muted); }
 .pad button:active { background: var(--wall-2); border-color: var(--cream); }
@@ -104,7 +109,13 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
   </section>
 
   <section class="panel" aria-labelledby="h-suona">
-    <h2 id="h-suona">Suona a mano</h2>
+    <h2 id="h-suona">Suona dal vivo</h2>
+    <div class="row mic">
+      <button id="mic" type="button" class="primary" aria-pressed="false">Ascolta la chitarra</button>
+      <span class="meter" aria-hidden="true"><span id="mic-level"></span></span>
+      <span class="mic-note" id="mic-note" aria-live="polite"></span>
+    </div>
+    <p class="hint" id="mic-msg">Serve un microfono o una scheda audio, e una pagina aperta da un sito (non dal disco). Una nota alla volta: la chitarra suona, la tela ascolta e dipinge. Il suono interno resta spento mentre ascolti. Riconosce hammer-on, pull-off, slide, bend e vibrato; bicordi e accordi no.</p>
     <div class="play">
       <p class="hint">La minore pentatonica su tre ottave: Z X C V B · A S D F G · W E R T Y. Maiusc = forte. Tieni premuto: il pennello avanza finché la nota dura.</p>
       <div class="pad" id="pad"></div>
@@ -124,6 +135,7 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
 <script src="riff-paint-oil.js"></script>
 <script src="codifica.js"></script>
 <script src="tab.js"></script>
+<script src="ascolto.js"></script>
 <script>
 (function () {
   const G = window.GuitarzornPaint7, COD = window.GuitarzornCodifica, TAB = window.GuitarzornTab;
@@ -190,7 +202,7 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
   });
 
   // ---- audio: chitarre campionate (una registrazione per nota) + sintetizzatore di riserva ----
-  let AC = null, master = null, audioOn = true, timbre = 'classica';
+  let AC = null, master = null, audioOn = true, timbre = 'classica', listening = false, muteRun = false;
   const SAMPLE_LO = 40, SAMPLE_HI = 88, BANK = {};          // BANK[timbro][midi] = AudioBuffer
   function ensureAudio() {
     if (AC) return;
@@ -237,6 +249,7 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
   /** glide: {to, delay, time} piega l'intonazione verso un'altra nota (slide, bend); vib: la nota trema */
   function soundOn(midi, vel, glide, vib) {
     if (!audioOn) return null;
+    if (listening || muteRun) return null;                  // ascoltando la chitarra, o dipingendo un giro del looper, la tela tace
     wake(); if (!AC || AC.state !== 'running') return null;   // senza un gesto dell'utente il browser non suona
     const now = AC.currentTime, bank = BANK[timbre], bm = Math.max(SAMPLE_LO, Math.min(SAMPLE_HI, midi));
     const v = timbre !== 'sintetico' && bank && bank[bm] ? sampleVoice(bank[bm], midi, bm, vel, now) : pluck(midi, vel, now);
@@ -352,6 +365,7 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
 
   function paint(seed, piece) {
     const me = ++run;
+    muteRun = !!(piece && piece.mute); micNotes.clear();
     for (const id of [...voices.keys()]) stopNote(id);
     held.clear(); ready = false; liveT0 = null; prevMidi = null; lastStroke = null; head.style.opacity = 0;
     eng = G.create(canvas, seed);
@@ -360,7 +374,7 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
     const plan = piece ? pieceActions(piece) : null, acts = plan ? plan.acts : [], beatMs = piece ? 60000 / piece.bpm : 500;
     let phase = 0, t0 = 0, next = 0, last = performance.now();
     if (still) {                                            // senza animazione: dipingi tutto subito, in silenzio
-      eng.finish(); ready = true;
+      eng.finish(); ready = true; announceReady();
       const was = audioOn; audioOn = false;
       for (let f = 0, dt = 1 / 60; piece && f < 60 * ((plan.end + 4) * beatMs / 1000); f++) {
         const beat = f * dt * 1000 / beatMs;
@@ -373,7 +387,7 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
       if (me !== run) return;
       const dt = Math.min((now - last) / 1000, 0.05); last = now;
       if (phase === 0) {
-        if (eng.tick(60000, 0)) { ready = true; phase = piece ? 1 : 2; t0 = now + 350; statusEl.textContent = piece ? piece.titolo + ' · ' + piece.bpm + ' al minuto' : 'tela pronta: suona'; }
+        if (eng.tick(60000, 0)) { ready = true; announceReady(); phase = piece ? 1 : 2; t0 = now + 350; statusEl.textContent = piece ? piece.titolo + ' · ' + piece.bpm + ' al minuto' : 'tela pronta: suona'; }
       } else {
         if (phase === 1) {
           const beat = (now - t0) / beatMs;
@@ -388,6 +402,90 @@ canvas { display: block; width: 100%; height: auto; max-width: 100%; aspect-rati
     }
     requestAnimationFrame(frame);
   }
+  // ---- ascoltare la chitarra: il microfono diventa pennello ---------------
+  const ASC = window.GuitarzornAscolto, micNotes = new Map(), micBtn = $('mic'), micMsg = $('mic-msg'), MIC_HINT = micMsg.textContent;
+  let mic = null, micPrev = null;
+  const GESTI = {                                           // gesto sentito sullo strumento → come cambia la pennellata in corso
+    slide:   e => ({ ang: (e.dir > 0 ? -1 : 1) * COD.TECNICHE.slide.gesto.angolo, curve: 0, speed: COD.TECNICHE.slide.gesto.velocita, dry: COD.TECNICHE.slide.gesto.secco }),
+    bend:    () => ({ curve: COD.TECNICHE.bend.gesto.curva, speed: COD.TECNICHE.bend.gesto.velocita }),
+    release: () => ({ curve: 0.005 }),
+    vibrato: () => ({ wav: COD.TECNICHE.vibrato.gesto.tremolo, wavLen: COD.TECNICHE.vibrato.gesto.passo }),
+  };
+  function onMic(evs) {
+    if (!ready) return;
+    evs.forEach(e => {
+      if (e.type === 'on') {
+        const now = performance.now(), iv = micPrev === null ? 0 : e.midi - micPrev; micPrev = e.midi;
+        const ids = playEvent('m' + e.id, { midis: [e.midi], tech: e.tech, to: null, vib: false, vel: e.vel }, playheadX(now), m => yOf(m, 40, 84), Math.max(-1.1, Math.min(1.1, -iv * 0.14)));
+        micNotes.set(e.id, ids);
+        $('mic-note').textContent = COD.noteName(e.midi) + (e.tech !== 'normale' ? ' · ' + COD.TECNICHE[e.tech].nome : '');
+        statusEl.textContent = 'ascolto la chitarra…';
+      } else if (e.type === 'gesture') {
+        const g = GESTI[e.tech]; if (!g) return;
+        (micNotes.get(e.id) || []).forEach(id => eng.noteGesture(id, g(e)));
+        $('mic-note').textContent = $('mic-note').textContent.split(' · ')[0] + ' · ' + (COD.TECNICHE[e.tech] ? COD.TECNICHE[e.tech].nome : 'rilascio del bend');
+      } else if (e.type === 'off') {
+        (micNotes.get(e.id) || []).forEach(stopNote); micNotes.delete(e.id);
+      }
+    });
+  }
+  function meter() {
+    if (!mic) { $('mic-level').style.width = '0'; return; }
+    $('mic-level').style.width = Math.min(100, Math.sqrt(mic.level / 0.25) * 100) + '%';
+    requestAnimationFrame(meter);
+  }
+  async function micToggle() {
+    if (mic) { mic.stop(); mic = null; listening = false; micBtn.setAttribute('aria-pressed', 'false'); micBtn.textContent = 'Ascolta la chitarra'; $('mic-note').textContent = ''; micMsg.textContent = MIC_HINT; return; }
+    if (!ASC || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { micMsg.textContent = 'Questo browser non dà accesso al microfono.'; return; }
+    wake();
+    try {
+      listening = true;
+      mic = await ASC.createMic(onMic, { context: AC || undefined });
+      micBtn.setAttribute('aria-pressed', 'true'); micBtn.textContent = 'Smetti di ascoltare';
+      micMsg.textContent = 'In ascolto. Suona una nota alla volta; il livello qui accanto deve muoversi quando suoni.';
+      if (!ready) micMsg.textContent += ' La tela si sta ancora preparando.';
+      micPrev = null; meter();
+    } catch (err) {
+      listening = false; mic = null;
+      micMsg.textContent = err && err.name === 'NotAllowedError' ? 'Il permesso per il microfono è stato negato: concedilo dal lucchetto accanto all’indirizzo e riprova.'
+        : err && err.name === 'NotFoundError' ? 'Non trovo nessun microfono o scheda audio collegati.'
+        : 'Il microfono non si apre qui (' + (err && err.name || 'errore') + '). Apri la pagina dal sito pubblicato.';
+    }
+  }
+  micBtn.addEventListener('click', e => { e.currentTarget.blur(); micToggle(); });
+
+  // ---- messaggi da Guitar Improv Lab (stesso protocollo di live/) -----------
+  // { type:'guitarzorn:ping' } → rispondo 'guitarzorn:ready' quando la tela è pronta
+  // { type:'loop', bpm, events:[{ midi, start, duration, velocity, technique }], mute }   un giro del looper
+  // { type:'noteOn', midi, velocity, technique } · { type:'noteOff', midi } · { type:'clear', newSeed }
+  const extHeld = new Map();
+  let bc = null;
+  function announceReady() {
+    try { if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'guitarzorn:ready' }, '*'); } catch (e) {}
+    try { if (bc) bc.postMessage({ type: 'guitarzorn:ready' }); } catch (e) {}
+  }
+  function handleExt(d, src) {
+    if (!d || typeof d !== 'object') return;
+    if (d.type === 'guitarzorn:ping') { if (ready) { try { (src || window.parent).postMessage({ type: 'guitarzorn:ready' }, '*'); } catch (e) {} } return; }
+    if (d.type === 'loop' && Array.isArray(d.events) && d.events.length) {
+      const bpm = d.bpm || 60, evs = d.events.filter(e => e && e.midi != null).map(e => ({
+        midis: [e.midi], t: +e.start || 0, d: Math.max(0.08, +e.duration || 0.25), vel: e.velocity == null ? 1.1 : +e.velocity,
+        tech: COD.TECNICHE[e.technique] ? e.technique : 'normale', to: null, vib: e.technique === 'vibrato' }));
+      if (!evs.length) return;
+      const beats = Math.max(1, Math.max(...evs.map(e => e.t + e.d)));
+      paint(seed, { titolo: 'Giro dal looper', bpm, beats, events: evs, mute: !!d.mute });
+      return;
+    }
+    if (d.type === 'noteOn' && d.midi != null && ready) {
+      const ids = playEvent('x' + d.midi, { midis: [d.midi], tech: COD.TECNICHE[d.technique] ? d.technique : 'normale', to: null, vib: d.technique === 'vibrato', vel: d.velocity == null ? 1.1 : +d.velocity }, playheadX(performance.now()), m => yOf(m, 40, 84), null);
+      extHeld.set(d.midi, ids); return;
+    }
+    if (d.type === 'noteOff' && d.midi != null) { (extHeld.get(d.midi) || []).forEach(stopNote); extHeld.delete(d.midi); return; }
+    if (d.type === 'clear') { if (d.newSeed) seed = 1 + Math.floor(Math.random() * 9999); paint(seed, null); }
+  }
+  window.addEventListener('message', ev => { if (ev.data && typeof ev.data === 'object' && typeof ev.data.type === 'string') handleExt(ev.data, ev.source); });
+  try { bc = new BroadcastChannel('guitarzorn'); bc.onmessage = ev => handleExt(ev.data, null); } catch (e) {}
+
   let seed = 42;
   const suonoSel = $('suono'), suonoMsg = $('suono-msg');
   suonoSel.addEventListener('change', () => { timbre = suonoSel.value; suonoMsg.textContent = ''; loadTimbre(timbre); });

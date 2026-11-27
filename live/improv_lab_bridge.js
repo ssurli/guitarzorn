@@ -214,7 +214,7 @@
     frame.src = ZORN_URL;
     frame.title = 'guitarzorn';
     frame.style.cssText = 'display:block;width:100%;height:min(70vh,760px);border:0;background:#111';
-    frame.allow = 'autoplay';
+    frame.allow = 'autoplay; microphone';   // microfono: la tela web-oil/ può ascoltare la chitarra dal vivo
     frame.addEventListener('load', () => { frameReady = false; startPing(); });
     panel.appendChild(bar);
     panel.appendChild(frame);
