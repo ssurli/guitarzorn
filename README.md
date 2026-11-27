@@ -90,13 +90,15 @@ eng.noteOff('n1');                                  // il pennello si alza e si 
 
 ## Stato e prossimi passi
 
+**Suonare con la chitarra.** Il collegamento con la chitarra passa da [Guitar Improv Lab](https://ssurli.github.io/guitar/), che ascolta lo strumento dal microfono: oggi registra un giro nel looper e, con 🎨 DIPINGI, lo fa dipingere dopo, non mentre suoni.
+
 **Limiti noti.**
 - La resa non è ancora al livello di un olio vero: il rilievo della pasta è calcolato e risulta troppo regolare.
 - Tapping e armonici sono quasi invisibili sul fondo chiaro.
 - I power chord fondono i colori in un bruno simile per ogni accordo.
 
 **Prossimi passi.**
-1. **Ricevere i giri dal looper di Guitar Improv Lab.** Oggi il pulsante 🎨 DIPINGI del looper manda il giro a `live/`, non a questa pagina.
+1. **Ricevere i giri dal looper di [Guitar Improv Lab](https://ssurli.github.io/guitar/).** Oggi il pulsante 🎨 DIPINGI del looper manda il giro a `live/`, non a questa pagina.
 2. **Ingresso dalla chitarra in tempo reale.** Nota, bend, slide e vibrato letti dall'altezza del suono; il riconoscimento dell'altezza esiste già in Guitar Improv Lab.
 3. **Pennellate fotografate.** Pennellate vere, dipinte e fotografate, al posto del rilievo calcolato.
 
@@ -105,7 +107,7 @@ eng.noteOff('n1');                                  // il pennello si alza e si 
 | Percorso | Contenuto |
 |---|---|
 | `web-oil/` | **La pagina principale**, descritta sopra. |
-| `live/` | Il painter precedente (`guitarzorn_live.html`), con ingresso MIDI e loop, e `improv_lab_bridge.js`, il ponte usato oggi dal looper di Guitar Improv Lab. |
+| `live/` | Il painter precedente (`guitarzorn_live.html`), con ingresso MIDI e loop, e `improv_lab_bridge.js`, il ponte usato oggi dal looper di [Guitar Improv Lab](https://ssurli.github.io/guitar/). |
 | `score.py` | Partitura canonica dell'intro di *Johnny B. Goode*, condivisa da pittura e audio. |
 | `zorn_riff_art*.py`, `zorn_riff_v4.py` … `zorn_riff_v9.py` | Le iterazioni del generatore in Python. |
 | `zorn_linear.py`, `zorn_grid.py`, `zorn_spiral.py`, `zorn_palette_reference.py` | Varianti di impaginazione e riferimento della tavolozza. |
