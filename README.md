@@ -11,7 +11,7 @@ Una codifica fissa collega i due mondi:
 - la **tecnica** (hammer-on, pull-off, slide, bend, vibrato…) il tipo di pennellata;
 - la **dinamica** quanto colore e quanta pasta.
 
-Le note possono arrivare da una tablatura, dalla tastiera del computer o, in prospettiva, direttamente dallo strumento.
+Le note possono arrivare da una tablatura, dalla tastiera del computer o direttamente dalla chitarra, ascoltata dal microfono mentre suoni.
 
 Il riferimento teorico è la *transliteration* di Rosa Juritz: non cercare l'equivalente pittorico di un suono, ma usare il mezzo pittorico allo stesso modo in cui si usa quello musicale.
 
@@ -23,7 +23,7 @@ Con GitHub Pages attivo sul branch `main` (cartella radice), la pagina principal
 
 1. Scegli un esempio (*Johnny B. Goode* o uno dei sei studi) oppure incolla una tablatura.
 2. Imposta il tempo in battiti al minuto e scegli il suono (chitarra classica, acustica, elettrica o sintetico).
-3. Premi **Suona e dipingi**. Con **Tela vuota** puoi invece suonare a mano: `Z X C V B` · `A S D F G` · `W E R T Y` (La minore pentatonica su tre ottave, Maiusc = forte), oppure i cinque tasti a schermo.
+3. Premi **Suona e dipingi**. Oppure premi **Tela vuota**, poi **Ascolta la chitarra** e suona: la tela dipinge mentre suoni. Senza chitarra puoi suonare a mano: `Z X C V B` · `A S D F G` · `W E R T Y` (La minore pentatonica su tre ottave, Maiusc = forte), oppure i cinque tasti a schermo.
 
 In locale basta aprire `web-oil/index.html` nel browser, ma i suoni campionati si caricano solo da un server: servi la cartella (per esempio `python -m http.server` dentro `web-oil/`), altrimenti la pagina usa il sintetizzatore.
 
@@ -75,6 +75,7 @@ Una pagina statica, senza dipendenze e senza build.
 | `web-oil/riff-paint-oil.js` | Il motore pittorico |
 | `web-oil/codifica.js` | La codifica |
 | `web-oil/tab.js` | Lettore di tablature e sei studi originali in La minore pentatonica |
+| `web-oil/ascolto.js` | Ascolto dal vivo: dal microfono alle note e alle tecniche (hammer-on, pull-off, slide, bend, vibrato) |
 | `web-oil/suoni/` | Chitarra classica, acustica ed elettrica, una registrazione per nota (MIDI 40–88) |
 
 Uso da codice:
@@ -90,16 +91,19 @@ eng.noteOff('n1');                                  // il pennello si alza e si 
 
 ## Stato e prossimi passi
 
-**Suonare con la chitarra.** Il collegamento con la chitarra passa da [Guitar Improv Lab](https://ssurli.github.io/guitar/), che ascolta lo strumento dal microfono: oggi registra un giro nel looper e, con 🎨 DIPINGI, lo fa dipingere dopo, non mentre suoni.
+**Suonare con la chitarra.** Con **Ascolta la chitarra** la pagina ascolta lo strumento dal microfono o dalla scheda audio e dipinge mentre suoni. Ogni nota fa atterrare il pennello; slide, bend e vibrato cambiano la pennellata mentre la nota è tenuta; hammer-on e pull-off attaccano il nuovo tocco al precedente. Una nota alla volta: bicordi e accordi non sono riconosciuti. Il microfono funziona solo con la pagina aperta da un sito (GitHub Pages o un server locale), non dal disco.
+
+La stessa pagina può stare dentro [Guitar Improv Lab](https://ssurli.github.io/guitar/): accetta i messaggi del ponte `live/improv_lab_bridge.js` (i giri del looper con 🎨 DIPINGI) e, nel riquadro, può ascoltare la chitarra. Per usarla al posto di `live/` basta che Improv Lab punti a `https://ssurli.github.io/guitarzorn/web-oil/` in `window.GUITARZORN_URL`.
 
 **Limiti noti.**
 - La resa non è ancora al livello di un olio vero: il rilievo della pasta è calcolato e risulta troppo regolare.
 - Tapping e armonici sono quasi invisibili sul fondo chiaro.
 - I power chord fondono i colori in un bruno simile per ogni accordo.
+- L'ascolto distingue male uno slide di due tasti da un bend di un tono, e un hammer-on suonato con forza può sembrare una nuova pennata.
 
 **Prossimi passi.**
-1. **Ricevere i giri dal looper di [Guitar Improv Lab](https://ssurli.github.io/guitar/).** Oggi il pulsante 🎨 DIPINGI del looper manda il giro a `live/`, non a questa pagina.
-2. **Ingresso dalla chitarra in tempo reale.** Nota, bend, slide e vibrato letti dall'altezza del suono; il riconoscimento dell'altezza esiste già in Guitar Improv Lab.
+1. **Tarare l'ascolto su registrazioni vere** di chitarra: oggi le soglie sono provate solo su segnali sintetici.
+2. **Puntare [Guitar Improv Lab](https://ssurli.github.io/guitar/) a questa pagina** invece che a `live/`.
 3. **Pennellate fotografate.** Pennellate vere, dipinte e fotografate, al posto del rilievo calcolato.
 
 ## Cosa c'è nel repository
